@@ -204,6 +204,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_client_socket = _client_sockets[_client_index]
 			_client_socket.close()
 		_server_socket.stop_accepting_clients()
+		_server_socket.close()
 
 	def test_client_messages_0(self):
 		# send basic text message from one client to the server
@@ -607,13 +608,13 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_server_sockets[0].read_async(_read_callback)
 			#print(f"read \"{_expected_lines[_expected_line_index]}\"")
 
-		print("waiting...")
+		#print("waiting...")
 		time.sleep(1.0)
 		while _client_socket.is_writing() or _server_sockets[0].is_reading():
 			# print(f"_is_writing: {_client_socket.is_writing()} | _is_reading: {_server_sockets[0].is_reading()}")
 			time.sleep(0.1)
 
-		print("finished")
+		#print("finished")
 
 		self.assertEqual(_messages_total, len(_expected_lines))
 		self.assertEqual(_messages_total, len(_actual_lines))

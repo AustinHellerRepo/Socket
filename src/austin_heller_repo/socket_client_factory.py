@@ -92,10 +92,10 @@ try:
 			return _key
 
 		def encrypt(self, *, decrypted_data: bytes) -> bytes:
-			print(f"key: \"{self.__key}\".")
-			print(f"len(key): {len(self.__key)}")
+			#print(f"key: \"{self.__key}\".")
+			#print(f"len(key): {len(self.__key)}")
 			_fernet = cryptography.fernet.Fernet(
-				key=self.__key
+				key=self.__key_base64
 			)
 			_encrypted_message_bytes = _fernet.encrypt(
 				data=decrypted_data
@@ -104,7 +104,7 @@ try:
 
 		def decrypt(self, *, encrypted_data: bytes) -> bytes:
 			_fernet = cryptography.fernet.Fernet(
-				key=self.__key
+				key=self.__key_base64
 			)
 			_decrypted_message_bytes = _fernet.decrypt(
 				token=encrypted_data
@@ -300,12 +300,9 @@ class EncryptedReadWriteSocket():
 	def read(self, bytes_length: int) -> bytes:
 
 		while len(self.__current_buffer) < bytes_length:
-			_encrypted_bytes_length = self.__read_write_socket.read(8)
-			_bytes_length_bytes = self.__encryption.decrypt(
-				encrypted_data=_encrypted_bytes_length
-			)
-			_bytes_length = int.from_bytes(_bytes_length_bytes, "big")
-			_encrypted_bytes = self.__read_write_socket.read(_bytes_length)
+			_encrypted_bytes_length_bytes = self.__read_write_socket.read(8)
+			_encrypted_bytes_length = int.from_bytes(_encrypted_bytes_length_bytes, "big")
+			_encrypted_bytes = self.__read_write_socket.read(_encrypted_bytes_length)
 			_decrypted_bytes = self.__encryption.decrypt(
 				encrypted_data=_encrypted_bytes
 			)
@@ -316,7 +313,7 @@ class EncryptedReadWriteSocket():
 
 	def write(self, data: bytes):
 
-		print(f"writing \"{data}\"")
+		#print(f"writing \"{data}\"")
 		_encrypted_bytes = self.__encryption.encrypt(
 			decrypted_data=data
 		)

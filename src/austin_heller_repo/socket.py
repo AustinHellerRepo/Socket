@@ -244,10 +244,11 @@ class ThreadDelay():
 
 class EncapsulatedThread():
 
-	def __init__(self, *, target, is_running_boolean_reference: BooleanReference):
+	def __init__(self, *, target, is_running_boolean_reference: BooleanReference, polling_thread_delay: ThreadDelay):
 
 		self.__target = target
 		self.__is_running_boolean_reference = is_running_boolean_reference
+		self.__polling_thread_delay = polling_thread_delay
 
 		self.__thread = None
 
@@ -261,6 +262,7 @@ class EncapsulatedThread():
 	def stop(self):
 
 		self.__is_running_boolean_reference.set(False)
+		self.__polling_thread_delay.try_abort()
 		self.__thread.join()
 		self.__thread = None
 

@@ -242,6 +242,29 @@ class ThreadDelay():
 		return _is_aborted
 
 
+class EncapsulatedThread():
+
+	def __init__(self, *, target, is_running_boolean_reference: BooleanReference):
+
+		self.__target = target
+		self.__is_running_boolean_reference = is_running_boolean_reference
+
+		self.__thread = None
+
+	def start(self):
+
+		if self.__thread is not None:
+			raise Exception("Must first stop before starting.")
+
+		self.__thread = start_thread(self.__target)
+
+	def stop(self):
+
+		self.__is_running_boolean_reference.set(False)
+		self.__thread.join()
+		self.__thread = None
+
+
 class ReadWriteSocket():
 
 	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float):

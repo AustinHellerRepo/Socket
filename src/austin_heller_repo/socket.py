@@ -166,6 +166,18 @@ class BooleanReference():
 		self.__value = value
 
 
+class StringReference():
+
+	def __init__(self, value: str):
+		self.__value = value
+
+	def get(self) -> str:
+		return self.__value
+
+	def set(self, value: str):
+		self.__value = value
+
+
 class ThreadDelay():
 
 	def __init__(self):
@@ -244,11 +256,12 @@ class ThreadDelay():
 
 class EncapsulatedThread():
 
-	def __init__(self, *, target, is_running_boolean_reference: BooleanReference, polling_thread_delay: ThreadDelay):
+	def __init__(self, *, target, is_running_boolean_reference: BooleanReference, polling_thread_delay: ThreadDelay, error_string_reference: StringReference):
 
 		self.__target = target
 		self.__is_running_boolean_reference = is_running_boolean_reference
 		self.__polling_thread_delay = polling_thread_delay
+		self.__error_string_reference = error_string_reference
 
 		self.__thread = None
 
@@ -265,6 +278,9 @@ class EncapsulatedThread():
 		self.__polling_thread_delay.try_abort()
 		self.__thread.join()
 		self.__thread = None
+
+	def get_last_error(self) -> str:
+		return self.__error_string_reference.get()
 
 
 class ReadWriteSocket():

@@ -241,14 +241,14 @@ class ThreadDelay():
 	def try_abort(self) -> bool:
 
 		self.__abort_semaphore.acquire()
-		if not self.__is_aborted.get() and not self.__is_completed.get():
-			self.__is_aborted.set(True)
-			self.__is_sleeping = False
-			_is_aborted = True
-			print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: releasing in abort")
-			self.__sleep_block_semaphore.release()
-		else:
-			_is_aborted = False
+		_is_aborted = False
+		if self.__is_sleeping:
+			if not self.__is_aborted.get() and not self.__is_completed.get():
+				self.__is_aborted.set(True)
+				self.__is_sleeping = False
+				_is_aborted = True
+				print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: releasing in abort")
+				self.__sleep_block_semaphore.release()
 		self.__abort_semaphore.release()
 
 		return _is_aborted

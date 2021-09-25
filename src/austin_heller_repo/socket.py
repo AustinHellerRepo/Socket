@@ -1021,10 +1021,13 @@ class Module():
 
 	def __init__(self):
 
-		self._send_method = None
+		self.__send_method = None
 
 	def set_send_method(self, *, send_method):
-		self._send_method = send_method
+		self.__send_method = send_method
+
+	def get_send_method(self):
+		return self.__send_method
 
 	def receive(self, *, data: str):
 		raise NotImplementedError()

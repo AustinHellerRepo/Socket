@@ -1019,8 +1019,11 @@ class ServerSocketFactory():
 
 class Module():
 
-	def __init__(self, *, send_method):
+	def __init__(self):
 
+		self._send_method = None
+
+	def set_send_method(self, *, send_method):
 		self._send_method = send_method
 
 	def receive(self, *, data: str):

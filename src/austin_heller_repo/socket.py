@@ -1041,6 +1041,9 @@ class Module():
 	def stop(self):
 		raise NotImplementedError()
 
+	def get_purpose_guid(self) -> str:
+		raise NotImplementedError()
+
 
 class ModuleLoader():
 

@@ -151,7 +151,6 @@ except ImportError:
 import time
 import re
 import os
-from datetime import datetime
 
 
 class BooleanReference():

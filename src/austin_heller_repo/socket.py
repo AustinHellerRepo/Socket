@@ -283,51 +283,6 @@ class EncapsulatedThread():
 		return self.__error_string_reference.get()
 
 
-class BlockingThread():
-
-	def __init__(self, *, target, is_running_boolean_reference: BooleanReference, thread_block_semaphore: Semaphore, cycle_block_semaphore: Semaphore, is_blocked_boolean_reference: BooleanReference, error_string_reference: StringReference):
-		self.__target = target
-		self.__is_running_boolean_reference = is_running_boolean_reference
-		self.__thread_block_semaphore = thread_block_semaphore
-		self.__cycle_block_semaphore = cycle_block_semaphore
-		self.__is_blocked_boolean_reference = is_blocked_boolean_reference
-		self.__error_string_reference = error_string_reference
-
-		self.__thread = None
-
-	def start(self):
-		if self.__thread is not None:
-			raise Exception("Must first stop before starting.")
-
-		self.__thread_block_semaphore.acquire()
-		self.__thread = start_thread(self.__target)
-
-	def stop(self):
-		self.__is_running_boolean_reference.set(False)
-		self.__thread_block_semaphore.release()
-		self.__thread.join()
-		self.__thread = None
-
-	def try_cycle_block(self):
-		if self.__thread is None:
-			raise Exception("Must first start before cycling block.")
-
-		_is_cycle_completed = False
-		if self.__is_blocked_boolean_reference.get():
-			self.__cycle_block_semaphore.acquire()
-			self.__thread_block_semaphore.release()
-			self.__is_blocked_boolean_reference.set(False)
-			time.sleep(0)
-			self.__thread_block_semaphore.acquire()
-			self.__cycle_block_semaphore.acquire()
-			self.__is_blocked_boolean_reference.set(True)
-			_is_cycle_completed = True
-		return _is_cycle_completed
-
-	def get_last_error(self) -> str:
-		return self.__error_string_reference.get()
-
-
 class SemaphoreRequest():
 
 	def __init__(self, *, acquire_semaphore_names, release_semaphore_names):
@@ -344,9 +299,10 @@ class SemaphoreRequest():
 
 class SemaphoreRequestQueue():
 
-	def __init__(self):
+	def __init__(self, *, acquired_semaphore_names):
 
-		self.__acquired_semaphore_names = []
+		self.__acquired_semaphore_names = acquired_semaphore_names
+
 		self.__enqueue_semaphore = Semaphore()
 		self.__active_queue = []  # this queue is holding semaphore requests that have not yet been attempted
 		self.__pending_queue = []  # this queue is holding semaphore requests that were already tried and could not be completed yet
@@ -436,6 +392,166 @@ class SemaphoreRequestQueue():
 				self.__pending_queue.append((_semaphore_request, _blocking_semaphore))
 
 		self.__dequeue_semaphore.release()
+
+
+class PreparedSemaphoreRequest():
+
+	def __init__(self, *, semaphore_request: SemaphoreRequest, semaphore_request_queue: SemaphoreRequestQueue):
+
+		self.__semaphore_request = semaphore_request
+		self.__semaphore_request_queue = semaphore_request_queue
+
+	def apply(self):
+
+		self.__semaphore_request_queue.enqueue(
+			semaphore_request=self.__semaphore_request
+		)
+
+
+class CyclingUnitOfWork():
+	'''
+	This class represents a unit of work that can be repeated until it determines that there is no more work to perform.
+	'''
+
+	def perform(self, *, try_get_next_work_queue_element_prepared_semaphore_request: PreparedSemaphoreRequest, acknowledge_nonempty_work_queue_prepared_semaphore_request: PreparedSemaphoreRequest) -> bool:
+		'''
+		This function should call try_get_next_work_queue_element_prepared_semaphore_request prior to determining if there is any work to perform and
+			then acknowledge_nonempty_work_queue_prepared_semaphore_request only if it determines that it should perform work.
+		This function expects that there is an underlying queue of work details that is being appended to asynchronously. In order to ensure that work
+			is addressed as quickly as possible as well as accurately, it is expected that the PreparedSemaphoreRequest instances will be used to facilitate
+			with the acquiring/releasing of semaphores that orchestrate the state of cycling in the ThreadCycle.
+		:param try_get_next_work_queue_element_prepared_semaphore_request: a PreparedSemaphoreRequest that blocks the ThreadCycle from trying to start another
+			cycle if it's already running or informing the user that the ThreadCycle is already cycling.
+		:param acknowledge_nonempty_work_queue_prepared_semaphore_request: a PreparedSemaphoreRequest that unblocks the ThreadCycle from permitting the user to
+			call try_cycle.
+		:return: if it completed a unit of work, signifying that another cycle attempt should be made.
+		'''
+		raise NotImplementedError()
+
+
+class ThreadCycle():
+	'''
+	This class will wait for a call to try_cycle and will then continue to perform the cycling_unit_of_work until it returns False, signifying that there is no more work to perform.
+	'''
+
+	def __init__(self, *, cycling_unit_of_work: CyclingUnitOfWork):
+
+		self.__cycling_unit_of_work = cycling_unit_of_work
+
+		self.__cycle_thread = None
+		self.__is_cycle_thread_running = False
+		self.__cycle_thread_semaphore = Semaphore()
+		self.__cycle_semaphore_request_queue = SemaphoreRequestQueue(
+			acquired_semaphore_names=["blocking cycle"]
+		)
+		self.__block_cycle_prepared_semaphore_request = PreparedSemaphoreRequest(
+			semaphore_request=SemaphoreRequest(
+				acquire_semaphore_names=["blocking cycle"],
+				release_semaphore_names=[]
+			),
+			semaphore_request_queue=self.__cycle_semaphore_request_queue
+		)
+		self.__starting_try_cycle_prepared_semaphore_request = PreparedSemaphoreRequest(
+			semaphore_request=SemaphoreRequest(
+				acquire_semaphore_names=["try cycle"],
+				release_semaphore_names=[]
+			),
+			semaphore_request_queue=self.__cycle_semaphore_request_queue
+		)
+		self.__finished_try_cycle_prepared_semaphore_request = PreparedSemaphoreRequest(
+			semaphore_request=SemaphoreRequest(
+				acquire_semaphore_names=[],
+				release_semaphore_names=["try cycle"]
+			),
+			semaphore_request_queue=self.__cycle_semaphore_request_queue
+		)
+		self.__finished_try_cycle_and_unblock_prepared_semaphore_request = PreparedSemaphoreRequest(
+			semaphore_request=SemaphoreRequest(
+				acquire_semaphore_names=[],
+				release_semaphore_names=["try cycle", "blocking cycle"]
+			),
+			semaphore_request_queue=self.__cycle_semaphore_request_queue
+		)
+		self.__try_get_next_work_queue_element_prepared_semaphore_request = PreparedSemaphoreRequest(
+			semaphore_request=SemaphoreRequest(
+				acquire_semaphore_names=["try cycle"],
+				release_semaphore_names=[]
+			),
+			semaphore_request_queue=self.__cycle_semaphore_request_queue
+		)
+		self.__acknowledge_nonempty_work_queue_prepared_semaphore_request = PreparedSemaphoreRequest(
+			semaphore_request=SemaphoreRequest(
+				acquire_semaphore_names=[],
+				release_semaphore_names=["try cycle"]
+			),
+			semaphore_request_queue=self.__cycle_semaphore_request_queue
+		)
+		self.__acknowledge_empty_work_queue_prepared_semaphore_request = PreparedSemaphoreRequest(
+			semaphore_request=SemaphoreRequest(
+				acquire_semaphore_names=[],
+				release_semaphore_names=["try cycle"]
+			),
+			semaphore_request_queue=self.__cycle_semaphore_request_queue
+		)
+		self.__is_cycling = False
+
+	def start(self):
+
+		self.__cycle_thread_semaphore.acquire()
+		if self.__is_cycle_thread_running:
+			_error = "Cycle must be stopped before it is started again."
+		else:
+			self.__is_cycle_thread_running = True
+			self.__cycle_thread = start_thread(self.__cycle_thread_method)
+			_error = None
+		self.__cycle_thread_semaphore.release()
+
+		if _error is not None:
+			raise Exception(_error)
+
+	def stop(self):
+
+		self.__cycle_thread_semaphore.acquire()
+		if not self.__is_cycle_thread_running:
+			_error = "Cycle must be started before it can be stopped."
+		else:
+			self.__is_cycle_thread_running = False
+			self.try_cycle()
+			self.__cycle_thread.join()
+			self.__cycle_thread = None
+			_error = None
+		self.__cycle_thread_semaphore.release()
+
+		if _error is not None:
+			raise Exception(_error)
+
+	def try_cycle(self) -> bool:
+		# try to start the internal cycle
+		# if it is already cycling, return false
+
+		self.__starting_try_cycle_prepared_semaphore_request.apply()
+		_is_cycling_started = not self.__is_cycling
+		if _is_cycling_started:
+			self.__is_cycling = True
+			self.__finished_try_cycle_and_unblock_prepared_semaphore_request.apply()
+		else:
+			self.__finished_try_cycle_prepared_semaphore_request.apply()
+		return _is_cycling_started
+
+	def __cycle_thread_method(self):
+		while self.__is_cycle_thread_running:
+			self.__block_cycle_prepared_semaphore_request.apply()
+			_is_work_successful = True
+			_is_work_started = False
+			while _is_work_successful and self.__is_cycle_thread_running:
+				_is_work_started = True
+				_is_work_successful = self.__cycling_unit_of_work.perform(
+					try_get_next_work_queue_element_prepared_semaphore_request=self.__try_get_next_work_queue_element_prepared_semaphore_request,
+					acknowledge_nonempty_work_queue_prepared_semaphore_request=self.__acknowledge_nonempty_work_queue_prepared_semaphore_request
+				)
+			self.__is_cycling = False
+			if _is_work_started:
+				self.__acknowledge_empty_work_queue_prepared_semaphore_request.apply()
 
 
 class ReadWriteSocket():

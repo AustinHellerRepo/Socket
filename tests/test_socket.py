@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest
+from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest
 import unittest
 import time
 from datetime import datetime
@@ -641,7 +641,9 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		for _trial_index in range(100):
 
-			_semaphore_request_queue = SemaphoreRequestQueue()
+			_semaphore_request_queue = SemaphoreRequestQueue(
+				acquired_semaphore_names=[]
+			)
 
 			_order = []
 			_order_semaphore = Semaphore()
@@ -722,7 +724,9 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		for _trial_index in range(100):
 
-			_semaphore_request_queue = SemaphoreRequestQueue()
+			_semaphore_request_queue = SemaphoreRequestQueue(
+				acquired_semaphore_names=[]
+			)
 
 			_order = []
 			_order_semaphore = Semaphore()
@@ -792,7 +796,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		for _actual_order in _actual_orders:
 			self.assertIn(_actual_order, _expected_orders)
 
-	def test_semaphore_request_2(self):
+	def test_semaphore_request_queue_2(self):
 		# test swapping of two semaphores
 
 		_expected_orders = [
@@ -806,7 +810,9 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		for _trial_index in range(100):
 
-			_semaphore_request_queue = SemaphoreRequestQueue()
+			_semaphore_request_queue = SemaphoreRequestQueue(
+				acquired_semaphore_names=[]
+			)
 
 			_order = []
 			_order_semaphore = Semaphore()
@@ -915,3 +921,79 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		for _actual_order in _actual_orders:
 			self.assertIn(_actual_order, _expected_orders)
+
+	def test_thread_cycle_0(self):
+
+		for _trial_index in range(10):
+
+			_order = []
+			_order_semaphore = Semaphore()
+
+			_work_queue = [
+				0.1,
+				0.1,
+				0.1
+			]
+			_work_queue_semaphore = Semaphore()
+
+			class TestCyclingUnitOfWork(CyclingUnitOfWork):
+
+				def __init__(self, *, index: int):
+					self.__index = index
+
+				def perform(self, *, try_get_next_work_queue_element_prepared_semaphore_request: PreparedSemaphoreRequest, acknowledge_nonempty_work_queue_prepared_semaphore_request: PreparedSemaphoreRequest) -> bool:
+					try_get_next_work_queue_element_prepared_semaphore_request.apply()
+					_work_queue_semaphore.acquire()
+					_is_successful = False
+					if len(_work_queue) != 0:
+						_work_queue_element = _work_queue.pop(0)
+						time.sleep(_work_queue_element)
+						_order_semaphore.acquire()
+						_order.append(self.__index)
+						_order_semaphore.release()
+						_is_successful = True
+						acknowledge_nonempty_work_queue_prepared_semaphore_request.apply()
+					_work_queue_semaphore.release()
+					return _is_successful
+
+			_thread_cycle = ThreadCycle(
+				cycling_unit_of_work=TestCyclingUnitOfWork(
+					index=0
+				)
+			)
+
+			time.sleep(0.5)
+
+			self.assertEqual([], _order)
+
+			_thread_cycle.start()
+
+			self.assertEqual([], _order)
+
+			_cycled = _thread_cycle.try_cycle()
+
+			self.assertEqual(True, _cycled)
+
+			time.sleep(0.5)
+
+			self.assertEqual([0, 0, 0], _order)
+
+			_work_queue.extend([
+				0.1,
+				0.1,
+				0.1
+			])
+
+			_cycled = _thread_cycle.try_cycle()
+
+			self.assertEqual(True, _cycled)
+
+			_cycled = _thread_cycle.try_cycle()
+
+			self.assertEqual(False, _cycled)
+
+			time.sleep(0.5)
+
+			self.assertEqual([0, 0, 0, 0, 0, 0], _order)
+
+			_thread_cycle.stop()

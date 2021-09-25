@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption
+from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest
 import unittest
 import time
 from datetime import datetime
@@ -629,3 +629,289 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_client_socket.close()
 		_server_sockets[0].close()
 		_server_socket.close()
+
+	def test_semaphore_request_queue_0(self):
+
+		_expected_orders = [
+			["first start", "first end", "second start", "third start", "second end", "third end"],
+			["first start", "first end", "second start", "third start", "third end", "second end"]
+		]
+
+		_actual_orders = []
+
+		for _trial_index in range(100):
+
+			_semaphore_request_queue = SemaphoreRequestQueue()
+
+			_order = []
+			_order_semaphore = Semaphore()
+
+			def _first_thread_method():
+				_order_semaphore.acquire()
+				_order.append("first start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=["test"],
+						release_semaphore_names=[]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("first end")
+				_order_semaphore.release()
+
+			def _second_thread_method():
+				_order_semaphore.acquire()
+				_order.append("second start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=["test"],
+						release_semaphore_names=[]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("second end")
+				_order_semaphore.release()
+
+			def _third_thread_method():
+				_order_semaphore.acquire()
+				_order.append("third start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=[],
+						release_semaphore_names=["test"]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("third end")
+				_order_semaphore.release()
+
+			_first_thread = start_thread(_first_thread_method)
+
+			time.sleep(0.05)
+
+			_second_thread = start_thread(_second_thread_method)
+
+			time.sleep(0.05)
+
+			_third_thread = start_thread(_third_thread_method)
+
+			time.sleep(0.05)
+
+			_actual_orders.append(_order)
+
+		for _actual_order in _actual_orders:
+			self.assertIn(_actual_order, _expected_orders)
+
+	def test_semaphore_request_queue_1(self):
+
+		_expected_orders = [
+			["first start", "second start", "second end", "first end", "third start", "third end"],
+			["first start", "second start", "first end", "second end", "third start", "third end"]
+		]
+
+		_actual_orders = []
+
+		for _trial_index in range(100):
+
+			_semaphore_request_queue = SemaphoreRequestQueue()
+
+			_order = []
+			_order_semaphore = Semaphore()
+
+			def _first_thread_method():
+				_order_semaphore.acquire()
+				_order.append("first start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=["test"],
+						release_semaphore_names=["release"]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("first end")
+				_order_semaphore.release()
+
+			def _second_thread_method():
+				_order_semaphore.acquire()
+				_order.append("second start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=["release"],
+						release_semaphore_names=[]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("second end")
+				_order_semaphore.release()
+
+			def _third_thread_method():
+				_order_semaphore.acquire()
+				_order.append("third start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=[],
+						release_semaphore_names=["test"]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("third end")
+				_order_semaphore.release()
+
+			_first_thread = start_thread(_first_thread_method)
+
+			time.sleep(0.05)
+
+			_second_thread = start_thread(_second_thread_method)
+
+			time.sleep(0.05)
+
+			_third_thread = start_thread(_third_thread_method)
+
+			time.sleep(0.05)
+
+			_actual_orders.append(_order)
+
+		for _actual_order in _actual_orders:
+			self.assertIn(_actual_order, _expected_orders)
+
+	def test_semaphore_request_2(self):
+		# test swapping of two semaphores
+
+		_expected_orders = [
+			["first start", "first end", "second start", "third start", "fourth start", "fourth end", "third end", "fifth start", "fifth end", "second end"],
+			["first start", "first end", "second start", "third start", "fourth start", "fourth end", "third end", "fifth start", "second end", "fifth end"],
+			["first start", "first end", "second start", "third start", "fourth start", "third end", "fourth end", "fifth start", "fifth end", "second end"],
+			["first start", "first end", "second start", "third start", "fourth start", "third end", "fourth end", "fifth start", "second end", "fifth end"]
+		]
+
+		_actual_orders = []
+
+		for _trial_index in range(100):
+
+			_semaphore_request_queue = SemaphoreRequestQueue()
+
+			_order = []
+			_order_semaphore = Semaphore()
+
+			def _first_thread_method():
+				_order_semaphore.acquire()
+				_order.append("first start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=["first", "second"],
+						release_semaphore_names=[]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("first end")
+				_order_semaphore.release()
+
+			def _second_thread_method():
+				_order_semaphore.acquire()
+				_order.append("second start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=["first", "second"],
+						release_semaphore_names=[]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("second end")
+				_order_semaphore.release()
+
+			def _third_thread_method():
+				_order_semaphore.acquire()
+				_order.append("third start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=["first"],
+						release_semaphore_names=["second"]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("third end")
+				_order_semaphore.release()
+
+			def _fourth_thread_method():
+				_order_semaphore.acquire()
+				_order.append("fourth start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=[],
+						release_semaphore_names=["first"]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("fourth end")
+				_order_semaphore.release()
+
+			def _fifth_thread_method():
+				_order_semaphore.acquire()
+				_order.append("fifth start")
+				_order_semaphore.release()
+
+				_semaphore_request_queue.enqueue(
+					semaphore_request=SemaphoreRequest(
+						acquire_semaphore_names=[],
+						release_semaphore_names=["first"]
+					)
+				)
+
+				_order_semaphore.acquire()
+				_order.append("fifth end")
+				_order_semaphore.release()
+
+			_first_thread = start_thread(_first_thread_method)
+
+			time.sleep(0.05)
+
+			_second_thread = start_thread(_second_thread_method)
+
+			time.sleep(0.05)
+
+			_third_thread = start_thread(_third_thread_method)
+
+			time.sleep(0.05)
+
+			_fourth_thread = start_thread(_fourth_thread_method)
+
+			time.sleep(0.05)
+
+			_fifth_thread = start_thread(_fifth_thread_method)
+
+			time.sleep(0.05)
+
+			_actual_orders.append(_order)
+
+		for _actual_order in _actual_orders:
+			self.assertIn(_actual_order, _expected_orders)

@@ -283,6 +283,161 @@ class EncapsulatedThread():
 		return self.__error_string_reference.get()
 
 
+class BlockingThread():
+
+	def __init__(self, *, target, is_running_boolean_reference: BooleanReference, thread_block_semaphore: Semaphore, cycle_block_semaphore: Semaphore, is_blocked_boolean_reference: BooleanReference, error_string_reference: StringReference):
+		self.__target = target
+		self.__is_running_boolean_reference = is_running_boolean_reference
+		self.__thread_block_semaphore = thread_block_semaphore
+		self.__cycle_block_semaphore = cycle_block_semaphore
+		self.__is_blocked_boolean_reference = is_blocked_boolean_reference
+		self.__error_string_reference = error_string_reference
+
+		self.__thread = None
+
+	def start(self):
+		if self.__thread is not None:
+			raise Exception("Must first stop before starting.")
+
+		self.__thread_block_semaphore.acquire()
+		self.__thread = start_thread(self.__target)
+
+	def stop(self):
+		self.__is_running_boolean_reference.set(False)
+		self.__thread_block_semaphore.release()
+		self.__thread.join()
+		self.__thread = None
+
+	def try_cycle_block(self):
+		if self.__thread is None:
+			raise Exception("Must first start before cycling block.")
+
+		_is_cycle_completed = False
+		if self.__is_blocked_boolean_reference.get():
+			self.__cycle_block_semaphore.acquire()
+			self.__thread_block_semaphore.release()
+			self.__is_blocked_boolean_reference.set(False)
+			time.sleep(0)
+			self.__thread_block_semaphore.acquire()
+			self.__cycle_block_semaphore.acquire()
+			self.__is_blocked_boolean_reference.set(True)
+			_is_cycle_completed = True
+		return _is_cycle_completed
+
+	def get_last_error(self) -> str:
+		return self.__error_string_reference.get()
+
+
+class SemaphoreRequest():
+
+	def __init__(self, *, acquire_semaphore_names, release_semaphore_names):
+
+		self.__acquire_semaphore_names = acquire_semaphore_names
+		self.__release_semaphore_names = release_semaphore_names
+
+	def get_aquire_semaphore_names(self):
+		return self.__acquire_semaphore_names
+
+	def get_release_semaphore_names(self):
+		return self.__release_semaphore_names
+
+
+class SemaphoreRequestQueue():
+
+	def __init__(self):
+
+		self.__acquired_semaphore_names = []
+		self.__enqueue_semaphore = Semaphore()
+		self.__active_queue = []  # this queue is holding semaphore requests that have not yet been attempted
+		self.__pending_queue = []  # this queue is holding semaphore requests that were already tried and could not be completed yet
+		self.__queue_semaphore = Semaphore()
+		self.__dequeue_semaphore = Semaphore()
+
+	def enqueue(self, *, semaphore_request: SemaphoreRequest):
+
+		self.__enqueue_semaphore.acquire()
+
+		_blocking_semaphore = Semaphore()
+		_blocking_semaphore.acquire()
+
+		self.__queue_semaphore.acquire()
+		self.__active_queue.append((semaphore_request, _blocking_semaphore))
+		if len(self.__active_queue) == 1:
+			_dequeue_thread = start_thread(self.__dequeue_thread_method)
+		self.__queue_semaphore.release()
+
+		self.__enqueue_semaphore.release()
+
+		_blocking_semaphore.acquire()
+		_blocking_semaphore.release()
+
+	def __dequeue_thread_method(self):
+
+		def _try_process_semaphore_request(*, semaphore_request: SemaphoreRequest) -> bool:
+			# can this semaphore request acquire the necessary semaphores?
+			_is_at_least_one_acquired_semaphore = False
+			_is_at_least_one_released_semaphore = False
+			for _acquire_semaphore_name in _semaphore_request.get_aquire_semaphore_names():
+				if _acquire_semaphore_name in self.__acquired_semaphore_names:
+					# this acquire semaphore name is already acquired, so it cannot be acquired again
+					_is_at_least_one_acquired_semaphore = True
+					break
+			if not _is_at_least_one_acquired_semaphore:
+				# can this semaphore request release the necessary semaphores?
+				for _release_semaphore_name in _semaphore_request.get_release_semaphore_names():
+					if _release_semaphore_name not in self.__acquired_semaphore_names:
+						# this release semaphore name is not currently acquired, so it cannot be released
+						_is_at_least_one_released_semaphore = True
+						break
+
+			if not _is_at_least_one_acquired_semaphore and not _is_at_least_one_released_semaphore:
+				self.__acquired_semaphore_names.extend(_semaphore_request.get_aquire_semaphore_names())
+				for _release_semaphore_name in _semaphore_request.get_release_semaphore_names():
+					self.__acquired_semaphore_names.remove(_release_semaphore_name)
+				return True
+			return False
+
+		self.__dequeue_semaphore.acquire()
+
+		_is_queue_empty = False
+		while not _is_queue_empty:
+
+			# try to process first pending semaphore request
+
+			self.__queue_semaphore.acquire()
+			_semaphore_request, _blocking_semaphore = self.__active_queue.pop(0)
+			_is_queue_empty = (len(self.__active_queue) == 0)
+			self.__queue_semaphore.release()
+
+			_is_active_semaphore_request_processed = _try_process_semaphore_request(
+				semaphore_request=_semaphore_request
+			)
+
+			# if it could be processed, then release blocking semaphore and run through the pending semaphore requests
+			if _is_active_semaphore_request_processed:
+				_blocking_semaphore.release()
+				#time.sleep(0.01)
+
+				_processed_pending_queue_indexes = []
+
+				for _pending_queue_index, (_semaphore_request, _blocking_semaphore) in enumerate(self.__pending_queue):
+					_is_pending_semaphore_request_processed = _try_process_semaphore_request(
+						semaphore_request=_semaphore_request
+					)
+					if _is_pending_semaphore_request_processed:
+						_blocking_semaphore.release()
+						#time.sleep(0)
+						_processed_pending_queue_indexes.append(_pending_queue_index)
+
+				for _pending_queue_index in reversed(_processed_pending_queue_indexes):
+					del self.__pending_queue[_pending_queue_index]
+
+			else:
+				self.__pending_queue.append((_semaphore_request, _blocking_semaphore))
+
+		self.__dequeue_semaphore.release()
+
+
 class ReadWriteSocket():
 
 	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float):

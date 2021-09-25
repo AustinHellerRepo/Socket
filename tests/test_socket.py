@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest
+from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ModuleLoader, Module
 import unittest
 import time
 from datetime import datetime
@@ -7,6 +7,7 @@ import threading
 from typing import List, Tuple
 import os
 import base64
+import shutil
 
 _port = 28776
 
@@ -997,3 +998,23 @@ class SocketClientFactoryTest(unittest.TestCase):
 			self.assertEqual([0, 0, 0, 0, 0, 0], _order)
 
 			_thread_cycle.stop()
+
+	def test_module_loader_0(self):
+
+		_test_directory_path = "/home/austin/temp/test_socket"
+
+		os.mkdir(_test_directory_path)
+		for _file_name in os.listdir(_test_directory_path):
+			_file_path = os.path.join(_test_directory_path, _file_name)
+			if os.path.isfile(_file_path) or os.path.islink(_file_path):
+				os.unlink(_file_path)
+			elif os.path.isdir(_file_path):
+				shutil.rmtree(_file_path)
+
+		_module_loader = ModuleLoader(
+			git_clone_directory_path=_test_directory_path
+		)
+
+		#_module_loader.load_module(
+		#	git_clone_url=
+		#)

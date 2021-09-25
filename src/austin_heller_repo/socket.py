@@ -153,6 +153,17 @@ import re
 import os
 
 
+try:
+	import importlib
+
+	def get_module_from_file_path(file_path: str):
+		return importlib.import_module(file_path)
+except ImportError:
+
+	def get_module_from_file_path(file_path: str):
+		raise NotImplementedError()
+
+
 class BooleanReference():
 
 	def __init__(self, value: bool):
@@ -1004,3 +1015,33 @@ class ServerSocketFactory():
 			client_read_failed_delay_seconds=self.__client_read_failed_delay_seconds,
 			encryption=self.__encryption
 		)
+
+
+class Module():
+
+	def __init__(self, *, send_method):
+
+		self._send_method = send_method
+
+	def receive(self, *, data: str):
+		raise NotImplementedError()
+
+
+class ModuleLoader():
+
+	def __init__(self, *, git_clone_directory_path: str):
+
+		self.__git_clone_directory_path = git_clone_directory_path
+
+		self.__module = None  # type: Module
+
+	def load_module(self, *, git_clone_url: str, module_file_name: str, module_name: str):
+
+		# clone git repo into directory
+
+		os.chdir(self.__git_clone_directory_path)
+		os.system("git clone " + git_clone_url)
+
+		_module_file_path = os.path.join(self.__git_clone_directory_path, module_file_name)
+
+		self.__module = get_module_from_file_path(_module_file_path)

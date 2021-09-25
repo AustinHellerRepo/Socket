@@ -154,13 +154,16 @@ import os
 
 
 try:
-	import importlib
+	import importlib.util
 
-	def get_module_from_file_path(file_path: str):
-		return importlib.import_module(file_path)
+	def get_module_from_file_path(file_path: str, module_name: str):
+		_spec = importlib.util.spec_from_file_location(module_name, file_path)
+		_module = importlib.util.module_from_spec(_spec)
+		_spec.loader.exec_module(_module)
+		return _module
 except ImportError:
 
-	def get_module_from_file_path(file_path: str):
+	def get_module_from_file_path(file_path: str, module_name: str):
 		raise NotImplementedError()
 
 
@@ -1045,15 +1048,27 @@ class ModuleLoader():
 
 		self.__git_clone_directory_path = git_clone_directory_path
 
-		self.__module = None  # type: Module
-
-	def load_module(self, *, git_clone_url: str, module_file_name: str, module_name: str):
+	def load_module(self, *, git_clone_url: str):
 
 		# clone git repo into directory
 
 		os.chdir(self.__git_clone_directory_path)
+
+		#print(f"clone url: \"{git_clone_url}\"")
+
 		os.system("git clone " + git_clone_url)
 
-		_module_file_path = os.path.join(self.__git_clone_directory_path, module_file_name)
+	def get_module(self, *, git_clone_url: str, module_file_name: str, module_name: str):
 
-		self.__module = get_module_from_file_path(_module_file_path)
+		_repo_name = git_clone_url.split("/")[-1]
+
+		_module_file_path = os.path.join(self.__git_clone_directory_path, _repo_name, module_file_name)
+
+		#print(f"looking for file: \"{_module_file_path}\"")
+
+		while not os.path.exists(_module_file_path):
+			time.sleep(0.1)
+
+		_module = get_module_from_file_path(_module_file_path, module_name)
+
+		return _module

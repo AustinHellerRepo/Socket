@@ -1003,18 +1003,65 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		_test_directory_path = "/home/austin/temp/test_socket"
 
-		os.mkdir(_test_directory_path)
-		for _file_name in os.listdir(_test_directory_path):
-			_file_path = os.path.join(_test_directory_path, _file_name)
-			if os.path.isfile(_file_path) or os.path.islink(_file_path):
-				os.unlink(_file_path)
-			elif os.path.isdir(_file_path):
-				shutil.rmtree(_file_path)
+		if True:
+			if not os.path.exists(_test_directory_path):
+				os.mkdir(_test_directory_path)
+			for _file_name in os.listdir(_test_directory_path):
+				_file_path = os.path.join(_test_directory_path, _file_name)
+				if os.path.isfile(_file_path) or os.path.islink(_file_path):
+					os.unlink(_file_path)
+				elif os.path.isdir(_file_path):
+					shutil.rmtree(_file_path)
 
 		_module_loader = ModuleLoader(
 			git_clone_directory_path=_test_directory_path
 		)
 
-		#_module_loader.load_module(
-		#	git_clone_url=
-		#)
+		_git_clone_url = "https://github.com/AustinHellerRepo/TestDeviceModule"
+
+		_module_loader.load_module(
+			git_clone_url=_git_clone_url
+		)
+
+		_module_directory_name = _git_clone_url.split("/")[-1]
+		_module_file_name = "module.py"
+
+		# need to alter the reference to austin_heller_repo with prefix "src"
+		_module_file_path = os.path.join(_test_directory_path, _module_directory_name, _module_file_name)
+
+		with open(_module_file_path, "rt") as _file_handle:
+			_file_data = _file_handle.read()
+		_file_data = _file_data.replace("austin_heller_repo", "src.austin_heller_repo")
+		with open(_module_file_path, "wt") as _file_handle:
+			_file_handle.write(_file_data)
+
+		_module = _module_loader.get_module(
+			git_clone_url=_git_clone_url,
+			module_file_name=_module_file_name,
+			module_name=_module_directory_name
+		)
+
+		self.assertIsNotNone(_module)
+
+		_instance = _module.ImplementedModule()  # type: Module
+
+		def _on_instance_sent_message(message: str):
+			print(f"instance sent: \"{message}\"")
+
+		_instance.set_send_method(
+			send_method=_on_instance_sent_message
+		)
+
+		self.assertIsNotNone(_instance)
+
+		_instance.start()
+
+		time.sleep(2.1)
+
+		_instance.receive(
+			data="from test"
+		)
+
+		time.sleep(2.0)
+
+		_instance.stop()

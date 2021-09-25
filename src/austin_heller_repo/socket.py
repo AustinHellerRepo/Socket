@@ -215,19 +215,13 @@ class ThreadDelay():
 				nonlocal seconds
 				nonlocal _is_aborted
 				nonlocal _is_completed
-				print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: sleeping for {seconds}")
 				time.sleep(seconds)
-				print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: slept for {seconds}")
 				self.__abort_semaphore.acquire()
 				if not _is_aborted.get() and not _is_completed.get():
-					print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: self.__is_aborted: {self.__is_aborted} - self.__is_completed: {self.__is_completed}")
 					_is_completed_normally = True
 					_is_completed.set(True)
 					self.__is_sleeping = False
-					print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: releasing in sleep")
 					self.__sleep_block_semaphore.release()
-				else:
-					print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: already aborted")
 				self.__abort_semaphore.release()
 
 			self.__sleep_block_semaphore.acquire()
@@ -247,7 +241,6 @@ class ThreadDelay():
 				self.__is_aborted.set(True)
 				self.__is_sleeping = False
 				_is_aborted = True
-				print(f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: releasing in abort")
 				self.__sleep_block_semaphore.release()
 		self.__abort_semaphore.release()
 

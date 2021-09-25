@@ -1029,6 +1029,12 @@ class Module():
 	def receive(self, *, data: str):
 		raise NotImplementedError()
 
+	def start(self):
+		raise NotImplementedError()
+
+	def stop(self):
+		raise NotImplementedError()
+
 
 class ModuleLoader():
 

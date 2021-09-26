@@ -436,9 +436,10 @@ class ThreadCycle():
 	This class will wait for a call to try_cycle and will then continue to perform the cycling_unit_of_work until it returns False, signifying that there is no more work to perform.
 	'''
 
-	def __init__(self, *, cycling_unit_of_work: CyclingUnitOfWork):
+	def __init__(self, *, cycling_unit_of_work: CyclingUnitOfWork, on_exception):
 
 		self.__cycling_unit_of_work = cycling_unit_of_work
+		self.__on_exception = on_exception
 
 		self.__cycle_thread = None
 		self.__is_cycle_thread_running = False
@@ -547,10 +548,14 @@ class ThreadCycle():
 			_is_work_started = False
 			while _is_work_successful and self.__is_cycle_thread_running:
 				_is_work_started = True
-				_is_work_successful = self.__cycling_unit_of_work.perform(
-					try_get_next_work_queue_element_prepared_semaphore_request=self.__try_get_next_work_queue_element_prepared_semaphore_request,
-					acknowledge_nonempty_work_queue_prepared_semaphore_request=self.__acknowledge_nonempty_work_queue_prepared_semaphore_request
-				)
+				try:
+					_is_work_successful = self.__cycling_unit_of_work.perform(
+						try_get_next_work_queue_element_prepared_semaphore_request=self.__try_get_next_work_queue_element_prepared_semaphore_request,
+						acknowledge_nonempty_work_queue_prepared_semaphore_request=self.__acknowledge_nonempty_work_queue_prepared_semaphore_request
+					)
+				except Exception as ex:
+					self.__on_exception(ex)
+					_is_work_successful = False
 			self.__is_cycling = False
 			if _is_work_started:
 				self.__acknowledge_empty_work_queue_prepared_semaphore_request.apply()
@@ -558,9 +563,10 @@ class ThreadCycle():
 
 class ThreadCycleCache():
 
-	def __init__(self, *, cycling_unit_of_work: CyclingUnitOfWork):
+	def __init__(self, *, cycling_unit_of_work: CyclingUnitOfWork, on_exception):
 
 		self.__cycling_unit_of_work = cycling_unit_of_work
+		self.__on_exception = on_exception
 
 		self.__thread_cycles = []
 		self.__thread_cycles_semaphore = Semaphore()
@@ -582,7 +588,8 @@ class ThreadCycleCache():
 
 		if _is_add_needed:
 			_thread_cycle = ThreadCycle(
-				cycling_unit_of_work=self.__cycling_unit_of_work
+				cycling_unit_of_work=self.__cycling_unit_of_work,
+				on_exception=self.__on_exception
 			)
 			_thread_cycle.start()
 			if not _thread_cycle.try_cycle():

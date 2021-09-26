@@ -925,6 +925,12 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 	def test_thread_cycle_0(self):
 
+		_exceptions = []
+
+		def _on_exception(ex):
+			print(f"ex: {ex}")
+			_exceptions.append(ex)
+
 		for _trial_index in range(10):
 
 			_order = []
@@ -960,7 +966,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_thread_cycle = ThreadCycle(
 				cycling_unit_of_work=TestCyclingUnitOfWork(
 					index=0
-				)
+				),
+				on_exception=_on_exception
 			)
 
 			time.sleep(0.5)
@@ -999,6 +1006,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 			_thread_cycle.stop()
 
+		self.assertEqual(0, len(_exceptions))
+
 	def test_thread_cycle_cache_0(self):
 
 		_order = []
@@ -1014,6 +1023,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 		class TestCyclingUnitOfWork(CyclingUnitOfWork):
 
 			def __init__(self, *, index: int):
+				super().__init__()
+
 				self.__index = index
 
 			def perform(self, *, try_get_next_work_queue_element_prepared_semaphore_request: PreparedSemaphoreRequest, acknowledge_nonempty_work_queue_prepared_semaphore_request: PreparedSemaphoreRequest) -> bool:
@@ -1031,10 +1042,17 @@ class SocketClientFactoryTest(unittest.TestCase):
 				_work_queue_semaphore.release()
 				return _is_successful
 
+		_exceptions = []
+
+		def _on_exception(ex):
+			print(f"ex: {ex}")
+			_exceptions.append(ex)
+
 		_thread_cycle_cache = ThreadCycleCache(
 			cycling_unit_of_work=TestCyclingUnitOfWork(
 				index=0
-			)
+			),
+			on_exception=_on_exception
 		)
 
 		_is_added = []  # type: List[bool]
@@ -1044,6 +1062,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 		self.assertEqual([True, True, True, False], _is_added)
 
 		_thread_cycle_cache.clear()
+
+		self.assertEqual(0, len(_exceptions))
 
 	def test_module_loader_0(self):
 

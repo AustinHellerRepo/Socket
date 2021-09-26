@@ -1065,3 +1065,5 @@ class SocketClientFactoryTest(unittest.TestCase):
 		time.sleep(2.0)
 
 		_instance.stop()
+
+		self.assertEqual("091CEE3D-D683-4B31-ABCE-A0AC568FF14B", _instance.get_purpose_guid())

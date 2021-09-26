@@ -1053,13 +1053,19 @@ class ModuleLoader():
 
 	def load_module(self, *, git_clone_url: str):
 
+		# TODO need to fix the clone to go to the directory directly since os.chdir is not available
+
 		# clone git repo into directory
+
+		if not os.path.exists(self.__git_clone_directory_path):
+			os.mkdir(self.__git_clone_directory_path)
 
 		os.chdir(self.__git_clone_directory_path)
 
 		#print(f"clone url: \"{git_clone_url}\"")
 
 		os.system("git clone " + git_clone_url)
+		#os.system("git clone " + git_clone_url + " " + self.__git_clone_directory_path)
 
 	def get_module(self, *, git_clone_url: str, module_file_name: str, module_name: str):
 

@@ -380,19 +380,15 @@ class SemaphoreRequestQueue():
 				_blocking_semaphore.release()
 				#time.sleep(0.01)
 
-				_processed_pending_queue_indexes = []
-
-				for _pending_queue_index, (_semaphore_request, _blocking_semaphore) in enumerate(self.__pending_queue):
-					_is_pending_semaphore_request_processed = _try_process_semaphore_request(
-						semaphore_request=_semaphore_request
-					)
-					if _is_pending_semaphore_request_processed:
-						_blocking_semaphore.release()
-						#time.sleep(0)
-						_processed_pending_queue_indexes.append(_pending_queue_index)
-
-				for _pending_queue_index in reversed(_processed_pending_queue_indexes):
-					del self.__pending_queue[_pending_queue_index]
+				_is_pending_semaphore_request_processed = True
+				while _is_pending_semaphore_request_processed and len(self.__pending_queue) != 0:
+					for _pending_queue_index, (_semaphore_request, _blocking_semaphore) in enumerate(self.__pending_queue):
+						_is_pending_semaphore_request_processed = _try_process_semaphore_request(
+							semaphore_request=_semaphore_request
+						)
+						if _is_pending_semaphore_request_processed:
+							_blocking_semaphore.release()
+							del self.__pending_queue[_pending_queue_index]
 
 			else:
 				self.__pending_queue.append((_semaphore_request, _blocking_semaphore))
@@ -558,6 +554,51 @@ class ThreadCycle():
 			self.__is_cycling = False
 			if _is_work_started:
 				self.__acknowledge_empty_work_queue_prepared_semaphore_request.apply()
+
+
+class ThreadCycleCache():
+
+	def __init__(self, *, cycling_unit_of_work: CyclingUnitOfWork):
+
+		self.__cycling_unit_of_work = cycling_unit_of_work
+
+		self.__thread_cycles = []
+		self.__thread_cycles_semaphore = Semaphore()
+
+	def try_add(self) -> bool:
+
+		_is_add_needed = True
+		self.__thread_cycles_semaphore.acquire()
+		for _thread_cycle_index in range(len(self.__thread_cycles)):
+			_thread_cycle = self.__thread_cycles[_thread_cycle_index]  # type: ThreadCycle
+			if _thread_cycle.try_cycle():
+				_is_add_needed = False
+
+				# move ThreadCycle to end of list while it runs
+				self.__thread_cycles.pop(_thread_cycle_index)
+				self.__thread_cycles.append(_thread_cycle)
+
+				break
+
+		if _is_add_needed:
+			_thread_cycle = ThreadCycle(
+				cycling_unit_of_work=self.__cycling_unit_of_work
+			)
+			_thread_cycle.start()
+			if not _thread_cycle.try_cycle():
+				self.__thread_cycles_semaphore.release()
+				raise Exception("Failed to start and cycle unit of work immediately.")
+			self.__thread_cycles.append(_thread_cycle)
+		self.__thread_cycles_semaphore.release()
+		return _is_add_needed
+
+	def clear(self):
+
+		self.__thread_cycles_semaphore.acquire()
+		for _thread_cycle in self.__thread_cycles:
+			_thread_cycle.stop()
+		self.__thread_cycles.clear()
+		self.__thread_cycles_semaphore.release()
 
 
 class ReadWriteSocket():

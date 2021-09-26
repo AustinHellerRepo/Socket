@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ModuleLoader, Module
+from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ModuleLoader, Module, ThreadCycleCache
 import unittest
 import time
 from datetime import datetime
@@ -998,6 +998,52 @@ class SocketClientFactoryTest(unittest.TestCase):
 			self.assertEqual([0, 0, 0, 0, 0, 0], _order)
 
 			_thread_cycle.stop()
+
+	def test_thread_cycle_cache_0(self):
+
+		_order = []
+		_order_semaphore = Semaphore()
+
+		_work_queue = [
+			0.1,
+			0.1,
+			0.1
+		]
+		_work_queue_semaphore = Semaphore()
+
+		class TestCyclingUnitOfWork(CyclingUnitOfWork):
+
+			def __init__(self, *, index: int):
+				self.__index = index
+
+			def perform(self, *, try_get_next_work_queue_element_prepared_semaphore_request: PreparedSemaphoreRequest, acknowledge_nonempty_work_queue_prepared_semaphore_request: PreparedSemaphoreRequest) -> bool:
+				try_get_next_work_queue_element_prepared_semaphore_request.apply()
+				_work_queue_semaphore.acquire()
+				_is_successful = False
+				if len(_work_queue) != 0:
+					_work_queue_element = _work_queue.pop(0)
+					time.sleep(_work_queue_element)
+					_order_semaphore.acquire()
+					_order.append(self.__index)
+					_order_semaphore.release()
+					_is_successful = True
+					acknowledge_nonempty_work_queue_prepared_semaphore_request.apply()
+				_work_queue_semaphore.release()
+				return _is_successful
+
+		_thread_cycle_cache = ThreadCycleCache(
+			cycling_unit_of_work=TestCyclingUnitOfWork(
+				index=0
+			)
+		)
+
+		_is_added = []  # type: List[bool]
+		for _index in range(len(_work_queue) + 1):
+			_is_added.append(_thread_cycle_cache.try_add())
+
+		self.assertEqual([True, True, True, False], _is_added)
+
+		_thread_cycle_cache.clear()
 
 	def test_module_loader_0(self):
 

@@ -1057,7 +1057,9 @@ class ModuleLoader():
 
 		# clone git repo into directory
 
-		if not os.path.exists(self.__git_clone_directory_path):
+		try:
+			os.stat(self.__git_clone_directory_path)
+		except FileNotFoundError():
 			os.mkdir(self.__git_clone_directory_path)
 
 		os.chdir(self.__git_clone_directory_path)

@@ -1059,8 +1059,11 @@ class ModuleLoader():
 
 		try:
 			os.stat(self.__git_clone_directory_path)
-		except FileNotFoundError():
-			os.mkdir(self.__git_clone_directory_path)
+		except Exception as ex:
+			if "No such file or directory" in str(ex):
+				os.mkdir(self.__git_clone_directory_path)
+			else:
+				raise ex
 
 		os.chdir(self.__git_clone_directory_path)
 

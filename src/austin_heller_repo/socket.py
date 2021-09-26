@@ -1061,6 +1061,10 @@ class ModuleLoader():
 			os.stat(self.__git_clone_directory_path)
 		except Exception as ex:
 			if "No such file or directory" in str(ex):
+				# normal
+				os.mkdir(self.__git_clone_directory_path)
+			elif "[Errno 2] ENOENT" in str(ex):
+				# micropython
 				os.mkdir(self.__git_clone_directory_path)
 			else:
 				raise ex

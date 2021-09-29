@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ModuleLoader, Module, ThreadCycleCache
+from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ModuleLoader, Module, ThreadCycleCache, ServerSocket
 import unittest
 import time
 from datetime import datetime
@@ -8,6 +8,7 @@ from typing import List, Tuple
 import os
 import base64
 import shutil
+import tempfile
 
 _port = 28776
 
@@ -1133,3 +1134,74 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_instance.stop()
 
 		self.assertEqual("091CEE3D-D683-4B31-ABCE-A0AC568FF14B", _instance.get_purpose_guid())
+
+	def test_upload_and_download_0(self):
+
+		_file_sizes = [
+			1024**2,
+			1024**2 * 10,
+			1,
+			0,
+			10,
+			1024**2 * 100,
+			1024**3,
+			0,
+			1,
+			2
+		]
+
+		_server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=0.1,
+			client_read_failed_delay_seconds=0.1
+		)
+
+		def _client_connected(client_socket: ClientSocket):
+			client_socket.upload(_source_temp_file.name)
+			client_socket.close()
+
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_client_connected
+		)
+
+		for _file_size in _file_sizes:
+
+			print(f"_file_size: {_file_size}")
+
+			_source_temp_file = tempfile.NamedTemporaryFile(delete=False)
+			with open(_source_temp_file.name, "wb") as _file_handle:
+				if _file_size > 0:
+					_file_handle.seek(_file_size - 1)
+					_file_handle.write(bytes(1))
+
+			with open(_source_temp_file.name, "rb") as _file_handle:
+				_file_handle.seek(0, 2)
+				self.assertEqual(_file_size, _file_handle.tell())
+
+			_client_socket = ClientSocket(
+				packet_bytes_length=4096,
+				read_failed_delay_seconds=0.1
+			)
+
+			_client_socket.connect_to_server(
+				ip_address="0.0.0.0",
+				port=_port
+			)
+
+			_destination_temp_file = tempfile.NamedTemporaryFile(delete=False)
+
+			_client_socket.download(_destination_temp_file.name)
+			_client_socket.close()
+
+			with open(_destination_temp_file.name, "rb") as _file_handle:
+				_file_handle.seek(0, 2)
+				self.assertEqual(_file_size, _file_handle.tell())
+
+			os.unlink(_source_temp_file.name)
+			os.unlink(_destination_temp_file.name)
+
+		_server_socket.stop_accepting_clients()
+		_server_socket.close()

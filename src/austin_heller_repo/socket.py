@@ -621,6 +621,7 @@ class ReadWriteSocket():
 
 	def __initialize(self):
 
+		self.__socket.setblocking(True)
 		if not hasattr(self.__socket, "readline"):
 			self.__readable_socket = self.__socket.makefile("rwb")
 		else:
@@ -693,6 +694,96 @@ class EncryptedReadWriteSocket():
 		self.__read_write_socket.close()
 
 
+class TextReader():
+
+	def __init__(self, *, text: str):
+
+		self.__text = text
+
+	def get_bytes(self, start_index: int, length: int) -> bytes:
+		return self.__text[start_index:start_index + length].encode()
+
+	def get_length(self) -> int:
+		return len(self.__text)
+
+	def close(self):
+		self.__text = None
+
+
+class FileReader():
+
+	def __init__(self, *, file_path: str):
+
+		self.__file_path = file_path
+
+		self.__file_handle = None
+
+	def get_bytes(self, start_index: int, length: int) -> bytes:
+		if self.__file_handle is None:
+			self.__file_handle = open(self.__file_path, "rb")
+		self.__file_handle.seek(start_index, 0)
+		_bytes = self.__file_handle.read(length)
+		return _bytes
+
+	def get_length(self) -> int:
+		if self.__file_handle is None:
+			self.__file_handle = open(self.__file_path, "rb")
+		self.__file_handle.seek(0, 2)
+		return self.__file_handle.tell()
+
+	def close(self):
+		self.__file_handle.close()
+		self.__file_handle = None
+		self.__file_path = None
+
+
+class TextBuilder():
+
+	def __init__(self):
+
+		self.__buffers = []
+		self.__current_length = 0
+
+	def write_bytes(self, index: int, data: bytes):
+		_length = len(data)
+		self.__buffers.append((index, _length, data))
+		_buffer_length = index + _length
+		if _buffer_length > self.__current_length:
+			self.__current_length = _buffer_length
+
+	def close(self) -> str:
+		_text_bytes = [0] * self.__current_length
+		for _buffer_index, _buffer_length, _buffer_data in self.__buffers:
+			_text_bytes[_buffer_index:_buffer_index + _buffer_length] = _buffer_data
+		_text = bytes(_text_bytes).decode()
+		self.__buffers = None
+		self.__current_length = 0
+		return _text
+
+
+class FileBuilder():
+
+	def __init__(self, *, file_path: str):
+
+		self.__file_path = file_path
+
+		self.__file_handle = None
+
+	def write_bytes(self, index: int, data: bytes):
+		if self.__file_handle is None:
+			self.__file_handle = open(self.__file_path, "wb")
+		self.__file_handle.seek(index, 0)
+		self.__file_handle.write(data)
+
+	def close(self) -> str:
+		if self.__file_handle is not None:
+			self.__file_handle.close()
+			self.__file_handle = None
+		_file_path = self.__file_path
+		self.__file_path = None
+		return _file_path
+
+
 class ClientSocket():
 
 	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, socket=None, encryption: Encryption = None):
@@ -758,14 +849,14 @@ class ClientSocket():
 	def is_reading(self) -> bool:
 		return self.__reading_threads_running_total > 0
 
-	def __write(self, *, delay_between_packets_seconds: float, text, is_async: bool):
+	def __write(self, *, delay_between_packets_seconds: float, reader: TextReader or FileReader, is_async: bool):
 
 		_blocking_semaphore = None
 		self.__writing_data_queue_semaphore.acquire()
 		if not is_async:
 			_blocking_semaphore = Semaphore()
 			_blocking_semaphore.acquire()
-		self.__writing_data_queue.append((delay_between_packets_seconds, text, _blocking_semaphore))
+		self.__writing_data_queue.append((delay_between_packets_seconds, reader, _blocking_semaphore))
 		_is_writing_thread_needed = not self.__is_writing_thread_running
 		if _is_writing_thread_needed:
 			self.__is_writing_thread_running = True
@@ -785,11 +876,10 @@ class ClientSocket():
 					self.__writing_threads_running_total -= 1
 					self.__writing_threads_running_total_semaphore.release()
 				else:
-					_delay_between_packets_seconds, _text, _blocking_semaphore = self.__writing_data_queue.pop(0)
+					_delay_between_packets_seconds, _reader, _blocking_semaphore = self.__writing_data_queue.pop(0)
 					self.__writing_data_queue_semaphore.release()
 
-					_text_bytes = _text.encode()
-					_text_bytes_length = len(_text_bytes)
+					_text_bytes_length = _reader.get_length()
 					_packet_bytes_length = self.__packet_bytes_length
 					_packets_total = int((_text_bytes_length + _packet_bytes_length - 1) / _packet_bytes_length)
 					_packets_total_bytes = _packets_total.to_bytes(8, "big")
@@ -803,12 +893,14 @@ class ClientSocket():
 						self.__read_write_socket.write(_current_packet_bytes_length_bytes)
 
 						_current_text_bytes_index = _packet_index * _packet_bytes_length
-						_packet_bytes = _text_bytes[_current_text_bytes_index:_current_text_bytes_index + _current_packet_bytes_length]
+						_packet_bytes = _reader.get_bytes(_current_text_bytes_index, _current_packet_bytes_length)
 
 						self.__read_write_socket.write(_packet_bytes)
 
 						if delay_between_packets_seconds > 0:
 							time.sleep(delay_between_packets_seconds)
+
+					_reader.close()
 
 					if _blocking_semaphore is not None:
 						_blocking_semaphore.release()
@@ -825,11 +917,13 @@ class ClientSocket():
 			_blocking_semaphore.acquire()
 			_blocking_semaphore.release()
 
-	def write_async(self, text, delay_between_packets_seconds: float = 0):
+	def write_async(self, text: str, delay_between_packets_seconds: float = 0):
 
 		self.__write(
 			delay_between_packets_seconds=delay_between_packets_seconds,
-			text=text,
+			reader=TextReader(
+				text=text
+			),
 			is_async=True
 		)
 
@@ -837,18 +931,40 @@ class ClientSocket():
 
 		self.__write(
 			delay_between_packets_seconds=delay_between_packets_seconds,
-			text=text,
+			reader=TextReader(
+				text=text
+			),
 			is_async=False
 		)
 
-	def __read(self, *, delay_between_packets_seconds: float, callback, is_async: bool):
+	def upload_async(self, file_path: str, delay_between_packets_seconds: float = 0):
+
+		self.__write(
+			delay_between_packets_seconds=delay_between_packets_seconds,
+			reader=FileReader(
+				file_path=file_path
+			),
+			is_async=True
+		)
+
+	def upload(self, file_path: str, delay_between_packets_seconds: float = 0):
+
+		self.__write(
+			delay_between_packets_seconds=delay_between_packets_seconds,
+			reader=FileReader(
+				file_path=file_path
+			),
+			is_async=False
+		)
+
+	def __read(self, *, delay_between_packets_seconds: float, callback, builder: TextBuilder or FileBuilder, is_async: bool):
 
 		_blocking_semaphore = None
 		self.__reading_callback_queue_semaphore.acquire()
 		if not is_async:
 			_blocking_semaphore = Semaphore()
 			_blocking_semaphore.acquire()
-		self.__reading_callback_queue.append((delay_between_packets_seconds, callback, _blocking_semaphore))
+		self.__reading_callback_queue.append((delay_between_packets_seconds, callback, builder, _blocking_semaphore))
 		_is_reading_thread_needed = not self.__is_reading_thread_running
 		if _is_reading_thread_needed:
 			self.__is_reading_thread_running = True
@@ -868,26 +984,24 @@ class ClientSocket():
 					self.__reading_threads_running_total -= 1
 					self.__reading_threads_running_total_semaphore.release()
 				else:
-					_delay_between_packets_seconds, _callback, _blocking_semaphore = self.__reading_callback_queue.pop(0)
+					_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
 					self.__reading_callback_queue_semaphore.release()
 
 					_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
 					_packets_total = int.from_bytes(_packets_total_bytes, "big")
-					_packets = []
+					_byte_index = 0
 					if _packets_total != 0:
 						for _packet_index in range(_packets_total):
 							_text_bytes_length_string_bytes = self.__read_write_socket.read(8)
 							_text_bytes_length = int.from_bytes(_text_bytes_length_string_bytes, "big")
 							_text_bytes = self.__read_write_socket.read(_text_bytes_length)
-							_packets.append(_text_bytes)
+							_builder.write_bytes(_byte_index, _text_bytes)
+							_byte_index += len(_text_bytes)
 
 							if delay_between_packets_seconds > 0:
 								time.sleep(delay_between_packets_seconds)
 
-					_text_bytes = b"".join(_packets)
-					_text = _text_bytes.decode()
-
-					_callback(_text)
+					_callback()
 
 					if _blocking_semaphore is not None:
 						_blocking_semaphore.release()
@@ -906,26 +1020,34 @@ class ClientSocket():
 
 	def read_async(self, callback, delay_between_packets_seconds: float = 0):
 
+		_builder = TextBuilder()
+
+		def _builder_callback():
+			callback(_builder.close())
+
 		self.__read(
 			delay_between_packets_seconds=delay_between_packets_seconds,
-			callback=callback,
+			callback=_builder_callback,
+			builder=_builder,
 			is_async=True
 		)
 
 	def read(self, delay_between_packets_seconds: float = 0) -> str:
 
+		_builder = TextBuilder()
 		_text = None
 		_is_callback_successful = False
 
-		def _callback(text: str):
+		def _builder_callback():
 			nonlocal _text
 			nonlocal _is_callback_successful
-			_text = text
+			_text = _builder.close()
 			_is_callback_successful = True
 
 		self.__read(
 			delay_between_packets_seconds=delay_between_packets_seconds,
-			callback=_callback,
+			callback=_builder_callback,
+			builder=_builder,
 			is_async=False
 		)
 
@@ -933,6 +1055,38 @@ class ClientSocket():
 			raise Exception(f"Read process failed to block sync method before returning.")
 
 		return _text
+
+	def download_async(self, file_path: str, callback, delay_between_packets_seconds: float = 0):
+
+		_builder = FileBuilder(
+			file_path=file_path
+		)
+
+		def _builder_callback():
+			callback(_builder.close())
+
+		self.__read(
+			delay_between_packets_seconds=delay_between_packets_seconds,
+			callback=_builder_callback,
+			builder=_builder,
+			is_async=True
+		)
+
+	def download(self, file_path: str, delay_between_packets_seconds: float = 0):
+
+		_builder = FileBuilder(
+			file_path=file_path
+		)
+
+		def _builder_callback():
+			_builder.close()
+
+		self.__read(
+			delay_between_packets_seconds=delay_between_packets_seconds,
+			callback=_builder_callback,
+			builder=_builder,
+			is_async=False
+		)
 
 	def close(self):
 

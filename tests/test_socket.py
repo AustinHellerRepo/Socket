@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ThreadCycleCache, ServerSocket
+from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ThreadCycleCache, ServerSocket, TimeoutThread
 import unittest
 import time
 from datetime import datetime
@@ -1205,3 +1205,62 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		_server_socket.stop_accepting_clients()
 		_server_socket.close()
+
+	def test_timeout_thread_0(self):
+		# will timeout
+
+		def _thread_method():
+			time.sleep(2.0)
+
+		_timeout_thread = TimeoutThread(
+			target=_thread_method,
+			timeout_seconds=1.0
+		)
+
+		_timeout_thread.start()
+
+		_is_successful = _timeout_thread.join()
+
+		self.assertFalse(_is_successful)
+
+	def test_timeout_thread_1(self):
+		# will not timeout
+
+		def _thread_method():
+			time.sleep(1.0)
+
+		_timeout_thread = TimeoutThread(
+			target=_thread_method,
+			timeout_seconds=2.0
+		)
+
+		_timeout_thread.start()
+
+		_is_successful = _timeout_thread.join()
+
+		self.assertTrue(_is_successful)
+
+	def test_timeout_thread_2(self):
+		# will be on the line between timeout or not
+
+		def _thread_method():
+			time.sleep(0.0999)
+
+		_outcomes = []
+		for _index in range(100):
+			_timeout_thread = TimeoutThread(
+				target=_thread_method,
+				timeout_seconds=0.1
+			)
+
+			_timeout_thread.start()
+
+			_is_successful = _timeout_thread.join()
+
+			_outcomes.append(_is_successful)
+
+		_is_successful_true_total = len([_outcome for _outcome in _outcomes if _outcome])
+		_is_successful_false_total = len([_outcome for _outcome in _outcomes if not _outcome])
+		print(f"True: {_is_successful_true_total}, False: {_is_successful_false_total}")
+
+		self.assertGreater(_is_successful_true_total, _is_successful_false_total)

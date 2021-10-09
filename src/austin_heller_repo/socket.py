@@ -438,6 +438,61 @@ class PreparedSemaphoreRequest():
 		)
 
 
+class TimeoutThread():
+
+	def __init__(self, target, timeout_seconds: float):
+
+		self.__target = target
+		self.__timeout_seconds = timeout_seconds
+
+		self.__timeout_thread_delay = None  # type: ThreadDelay
+		self.__join_semaphore = Semaphore()
+		self.__is_timed_out = None
+
+	def start(self, *args, **kwargs):
+
+		self.__join_semaphore.acquire()
+
+		_truth_semaphore = Semaphore()
+
+		self.__timeout_thread_delay = ThreadDelay()
+
+		self.__is_timed_out = None
+
+		def _timeout_thread_method():
+
+			self.__timeout_thread_delay.try_sleep(
+				seconds=self.__timeout_seconds
+			)
+
+			_truth_semaphore.acquire()
+			if self.__is_timed_out is None:
+				self.__is_timed_out = True
+				self.__join_semaphore.release()
+			_truth_semaphore.release()
+
+		def _process_thread_method():
+
+			self.__target(*args, **kwargs)
+
+			_truth_semaphore.acquire()
+			if self.__is_timed_out is None:
+				self.__is_timed_out = False
+				self.__join_semaphore.release()
+				self.__timeout_thread_delay.try_abort()
+			_truth_semaphore.release()
+
+		_timeout_thread = start_thread(_timeout_thread_method)
+		_process_thread = start_thread(_process_thread_method)
+
+	def join(self) -> bool:
+
+		self.__join_semaphore.acquire()
+		self.__join_semaphore.release()
+
+		return not self.__is_timed_out
+
+
 class CyclingUnitOfWork():
 	'''
 	This class represents a unit of work that can be repeated until it determines that there is no more work to perform.
@@ -814,12 +869,13 @@ class FileBuilder():
 
 class ClientSocket():
 
-	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0):
+	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None):
 
 		self.__packet_bytes_length = packet_bytes_length
 		self.__read_failed_delay_seconds = read_failed_delay_seconds
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
+		self.__timeout_seconds = timeout_seconds
 
 		self.__ip_address = None  # type: str
 		self.__port = None  # type: int

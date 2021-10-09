@@ -1,4 +1,33 @@
 
+import os
+
+
+def try_mkdir(directory_path) -> bool:
+	try:
+		os.stat(directory_path)
+		return False
+	except Exception as ex:
+		if "No such file or directory" in str(ex):
+			# normal
+			os.mkdir(directory_path)
+			return True
+		elif "[Errno 2] ENOENT" in str(ex):
+			# micropython
+			os.mkdir(directory_path)
+			return True
+		else:
+			raise ex
+
+
+def join_path(*paths):
+	_full_path = paths[0]
+	for _path in paths:
+		if _full_path[-1] != "/":
+			_full_path += "/"
+		_full_path += _path
+	return _full_path
+
+
 try:
 	import usocket as socket
 except ImportError:
@@ -150,7 +179,6 @@ except ImportError:
 
 import time
 import re
-import os
 
 
 try:
@@ -786,11 +814,12 @@ class FileBuilder():
 
 class ClientSocket():
 
-	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, socket=None, encryption: Encryption = None):
+	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0):
 
 		self.__packet_bytes_length = packet_bytes_length
 		self.__read_failed_delay_seconds = read_failed_delay_seconds
 		self.__encryption = encryption
+		self.__delay_between_packets_seconds = delay_between_packets_seconds
 
 		self.__ip_address = None  # type: str
 		self.__port = None  # type: int
@@ -849,14 +878,14 @@ class ClientSocket():
 	def is_reading(self) -> bool:
 		return self.__reading_threads_running_total > 0
 
-	def __write(self, *, delay_between_packets_seconds: float, reader: TextReader or FileReader, is_async: bool):
+	def __write(self, *, reader: TextReader or FileReader, is_async: bool):
 
 		_blocking_semaphore = None
 		self.__writing_data_queue_semaphore.acquire()
 		if not is_async:
 			_blocking_semaphore = Semaphore()
 			_blocking_semaphore.acquire()
-		self.__writing_data_queue.append((delay_between_packets_seconds, reader, _blocking_semaphore))
+		self.__writing_data_queue.append((self.__delay_between_packets_seconds, reader, _blocking_semaphore))
 		_is_writing_thread_needed = not self.__is_writing_thread_running
 		if _is_writing_thread_needed:
 			self.__is_writing_thread_running = True
@@ -897,8 +926,7 @@ class ClientSocket():
 
 						self.__read_write_socket.write(_packet_bytes)
 
-						if delay_between_packets_seconds > 0:
-							time.sleep(delay_between_packets_seconds)
+						time.sleep(self.__delay_between_packets_seconds)
 
 					_reader.close()
 
@@ -917,54 +945,50 @@ class ClientSocket():
 			_blocking_semaphore.acquire()
 			_blocking_semaphore.release()
 
-	def write_async(self, text: str, delay_between_packets_seconds: float = 0):
+	def write_async(self, text: str):
 
 		self.__write(
-			delay_between_packets_seconds=delay_between_packets_seconds,
 			reader=TextReader(
 				text=text
 			),
 			is_async=True
 		)
 
-	def write(self, text: str, delay_between_packets_seconds: float = 0):
+	def write(self, text: str):
 
 		self.__write(
-			delay_between_packets_seconds=delay_between_packets_seconds,
 			reader=TextReader(
 				text=text
 			),
 			is_async=False
 		)
 
-	def upload_async(self, file_path: str, delay_between_packets_seconds: float = 0):
+	def upload_async(self, file_path: str):
 
 		self.__write(
-			delay_between_packets_seconds=delay_between_packets_seconds,
 			reader=FileReader(
 				file_path=file_path
 			),
 			is_async=True
 		)
 
-	def upload(self, file_path: str, delay_between_packets_seconds: float = 0):
+	def upload(self, file_path: str):
 
 		self.__write(
-			delay_between_packets_seconds=delay_between_packets_seconds,
 			reader=FileReader(
 				file_path=file_path
 			),
 			is_async=False
 		)
 
-	def __read(self, *, delay_between_packets_seconds: float, callback, builder: TextBuilder or FileBuilder, is_async: bool):
+	def __read(self, *, callback, builder: TextBuilder or FileBuilder, is_async: bool):
 
 		_blocking_semaphore = None
 		self.__reading_callback_queue_semaphore.acquire()
 		if not is_async:
 			_blocking_semaphore = Semaphore()
 			_blocking_semaphore.acquire()
-		self.__reading_callback_queue.append((delay_between_packets_seconds, callback, builder, _blocking_semaphore))
+		self.__reading_callback_queue.append((self.__delay_between_packets_seconds, callback, builder, _blocking_semaphore))
 		_is_reading_thread_needed = not self.__is_reading_thread_running
 		if _is_reading_thread_needed:
 			self.__is_reading_thread_running = True
@@ -998,8 +1022,7 @@ class ClientSocket():
 							_builder.write_bytes(_byte_index, _text_bytes)
 							_byte_index += len(_text_bytes)
 
-							if delay_between_packets_seconds > 0:
-								time.sleep(delay_between_packets_seconds)
+							time.sleep(self.__delay_between_packets_seconds)
 
 					_callback()
 
@@ -1018,7 +1041,7 @@ class ClientSocket():
 			_blocking_semaphore.acquire()
 			_blocking_semaphore.release()
 
-	def read_async(self, callback, delay_between_packets_seconds: float = 0):
+	def read_async(self, callback):
 
 		_builder = TextBuilder()
 
@@ -1026,13 +1049,12 @@ class ClientSocket():
 			callback(_builder.close())
 
 		self.__read(
-			delay_between_packets_seconds=delay_between_packets_seconds,
 			callback=_builder_callback,
 			builder=_builder,
 			is_async=True
 		)
 
-	def read(self, delay_between_packets_seconds: float = 0) -> str:
+	def read(self) -> str:
 
 		_builder = TextBuilder()
 		_text = None
@@ -1045,7 +1067,6 @@ class ClientSocket():
 			_is_callback_successful = True
 
 		self.__read(
-			delay_between_packets_seconds=delay_between_packets_seconds,
 			callback=_builder_callback,
 			builder=_builder,
 			is_async=False
@@ -1056,7 +1077,7 @@ class ClientSocket():
 
 		return _text
 
-	def download_async(self, file_path: str, callback, delay_between_packets_seconds: float = 0):
+	def download_async(self, file_path: str, callback):
 
 		_builder = FileBuilder(
 			file_path=file_path
@@ -1066,13 +1087,12 @@ class ClientSocket():
 			callback(_builder.close())
 
 		self.__read(
-			delay_between_packets_seconds=delay_between_packets_seconds,
 			callback=_builder_callback,
 			builder=_builder,
 			is_async=True
 		)
 
-	def download(self, file_path: str, delay_between_packets_seconds: float = 0):
+	def download(self, file_path: str):
 
 		_builder = FileBuilder(
 			file_path=file_path
@@ -1082,7 +1102,6 @@ class ClientSocket():
 			_builder.close()
 
 		self.__read(
-			delay_between_packets_seconds=delay_between_packets_seconds,
 			callback=_builder_callback,
 			builder=_builder,
 			is_async=False
@@ -1095,29 +1114,32 @@ class ClientSocket():
 
 class ClientSocketFactory():
 
-	def __init__(self, *, to_server_packet_bytes_length: int, server_read_failed_delay_seconds: float, encryption: Encryption = None):
+	def __init__(self, *, to_server_packet_bytes_length: int, server_read_failed_delay_seconds: float, encryption: Encryption = None, delay_between_packets_seconds: float = 0):
 
 		self.__to_server_packet_bytes_length = to_server_packet_bytes_length
 		self.__server_read_failed_delay_seconds = server_read_failed_delay_seconds
 		self.__encryption = encryption
+		self.__delay_between_packets_seconds = delay_between_packets_seconds
 
 	def get_client_socket(self) -> ClientSocket:
 		return ClientSocket(
 			packet_bytes_length=self.__to_server_packet_bytes_length,
 			read_failed_delay_seconds=self.__server_read_failed_delay_seconds,
-			encryption=self.__encryption
+			encryption=self.__encryption,
+			delay_between_packets_seconds=self.__delay_between_packets_seconds
 		)
 
 
 class ServerSocket():
 
-	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, encryption: Encryption = None):
+	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, encryption: Encryption = None, delay_between_packets_seconds: float = 0):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
 		self.__accept_timeout_seconds = accept_timeout_seconds
 		self.__client_read_failed_delay_seconds = client_read_failed_delay_seconds
 		self.__encryption = encryption
+		self.__delay_between_packets_seconds = delay_between_packets_seconds
 
 		self.__host_ip_address = None  # type: str
 		self.__host_port = None  # type: int
@@ -1146,7 +1168,8 @@ class ServerSocket():
 						packet_bytes_length=to_client_packet_bytes_length,
 						read_failed_delay_seconds=client_read_failed_delay_seconds,
 						socket=connection_socket,
-						encryption=self.__encryption
+						encryption=self.__encryption,
+						delay_between_packets_seconds=self.__delay_between_packets_seconds
 					)
 					_is_valid_client = on_accepted_client_method(_accepted_socket)
 					if _is_valid_client == False:
@@ -1203,13 +1226,15 @@ class ServerSocketFactory():
 				 listening_limit_total: int,
 				 accept_timeout_seconds: float,
 				 client_read_failed_delay_seconds: float,
-				 encryption: Encryption = None):
+				 encryption: Encryption = None,
+				 delay_between_packets_seconds: float = 0):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
 		self.__accept_timeout_seconds = accept_timeout_seconds
 		self.__client_read_failed_delay_seconds = client_read_failed_delay_seconds
 		self.__encryption = encryption
+		self.__delay_between_packets_seconds = delay_between_packets_seconds
 
 	def get_server_socket(self) -> ServerSocket:
 
@@ -1218,5 +1243,6 @@ class ServerSocketFactory():
 			listening_limit_total=self.__listening_limit_total,
 			accept_timeout_seconds=self.__accept_timeout_seconds,
 			client_read_failed_delay_seconds=self.__client_read_failed_delay_seconds,
-			encryption=self.__encryption
+			encryption=self.__encryption,
+			delay_between_packets_seconds=self.__delay_between_packets_seconds
 		)

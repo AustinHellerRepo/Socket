@@ -121,8 +121,6 @@ try:
 			return _key
 
 		def encrypt(self, *, decrypted_data: bytes) -> bytes:
-			#print(f"key: \"{self.__key}\".")
-			#print(f"len(key): {len(self.__key)}")
 			_fernet = cryptography.fernet.Fernet(
 				key=self.__key_base64
 			)
@@ -223,7 +221,6 @@ class ThreadDelay():
 
 	def __init__(self):
 
-		self.__abort_semaphore = Semaphore()
 		self.__is_sleeping = False
 		self.__is_sleeping_semaphore = Semaphore()
 		self.__is_aborted = None  # type: BooleanReference
@@ -257,13 +254,13 @@ class ThreadDelay():
 				nonlocal _is_aborted
 				nonlocal _is_completed
 				time.sleep(seconds)
-				self.__abort_semaphore.acquire()
+				self.__is_sleeping_semaphore.acquire()
 				if not _is_aborted.get() and not _is_completed.get():
 					_is_completed_normally = True
 					_is_completed.set(True)
 					self.__is_sleeping = False
 					self.__sleep_block_semaphore.release()
-				self.__abort_semaphore.release()
+				self.__is_sleeping_semaphore.release()
 
 			self.__sleep_block_semaphore.acquire()
 			_sleep_thread = start_thread(_sleep_thread_method)
@@ -275,7 +272,7 @@ class ThreadDelay():
 
 	def try_abort(self) -> bool:
 
-		self.__abort_semaphore.acquire()
+		self.__is_sleeping_semaphore.acquire()
 		_is_aborted = False
 		if self.__is_sleeping:
 			if not self.__is_aborted.get() and not self.__is_completed.get():
@@ -283,7 +280,7 @@ class ThreadDelay():
 				self.__is_sleeping = False
 				_is_aborted = True
 				self.__sleep_block_semaphore.release()
-		self.__abort_semaphore.release()
+		self.__is_sleeping_semaphore.release()
 
 		return _is_aborted
 
@@ -448,10 +445,13 @@ class TimeoutThread():
 		self.__timeout_thread_delay = None  # type: ThreadDelay
 		self.__join_semaphore = Semaphore()
 		self.__is_timed_out = None
+		self.__process_completed_semaphore = Semaphore()
+		self.__process_exception = None  # type: Exception
 
 	def start(self, *args, **kwargs):
 
 		self.__join_semaphore.acquire()
+		self.__process_completed_semaphore.acquire()
 
 		_truth_semaphore = Semaphore()
 
@@ -473,7 +473,10 @@ class TimeoutThread():
 
 		def _process_thread_method():
 
-			self.__target(*args, **kwargs)
+			try:
+				self.__target(*args, **kwargs)
+			except Exception as ex:
+				self.__process_exception = ex
 
 			_truth_semaphore.acquire()
 			if self.__is_timed_out is None:
@@ -481,14 +484,28 @@ class TimeoutThread():
 				self.__join_semaphore.release()
 				self.__timeout_thread_delay.try_abort()
 			_truth_semaphore.release()
+			self.__process_completed_semaphore.release()
 
 		_timeout_thread = start_thread(_timeout_thread_method)
 		_process_thread = start_thread(_process_thread_method)
 
-	def join(self) -> bool:
+	def try_wait(self) -> bool:
 
 		self.__join_semaphore.acquire()
 		self.__join_semaphore.release()
+
+		if self.__process_exception is not None:
+			raise self.__process_exception
+
+		return not self.__is_timed_out
+
+	def try_join(self) -> bool:
+
+		self.__process_completed_semaphore.acquire()
+		self.__process_completed_semaphore.release()
+
+		if self.__process_exception is not None:
+			raise self.__process_exception
 
 		return not self.__is_timed_out
 
@@ -734,7 +751,7 @@ class ReadWriteSocket():
 	def close(self):
 
 		if self.__readable_socket != self.__socket:
-			self.__readable_socket.close()
+			del self.__readable_socket
 		self.__socket.close()
 
 
@@ -763,7 +780,6 @@ class EncryptedReadWriteSocket():
 
 	def write(self, data: bytes):
 
-		#print(f"writing \"{data}\"")
 		_encrypted_bytes = self.__encryption.encrypt(
 			decrypted_data=data
 		)
@@ -867,6 +883,16 @@ class FileBuilder():
 		return _file_path
 
 
+class ClientSocketTimeoutException(Exception):
+
+	def __init__(self, *, timeout_thread: TimeoutThread):
+
+		self.__timeout_thread = timeout_thread
+
+	def get_timeout_thread(self) -> TimeoutThread:
+		return self.__timeout_thread
+
+
 class ClientSocket():
 
 	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None):
@@ -893,6 +919,10 @@ class ClientSocket():
 		self.__reading_callback_queue_semaphore = Semaphore()
 		self.__is_reading_thread_running = False
 		self.__read_started_semaphore = Semaphore()
+		self.__exception = None  # type: Exception
+		self.__exception_semaphore = Semaphore()
+		self.__writing_semaphore = Semaphore()  # block closing while writing
+		self.__reading_semaphore = Semaphore()  # block closing while reading
 
 		self.__initialize()
 
@@ -945,51 +975,94 @@ class ClientSocket():
 		_is_writing_thread_needed = not self.__is_writing_thread_running
 		if _is_writing_thread_needed:
 			self.__is_writing_thread_running = True
+
+		self.__exception_semaphore.acquire()
+		_exception = self.__exception  # get potentially non-null exception
+		self.__exception = None  # clear exception if non-null
+		self.__exception_semaphore.release()
+
 		self.__writing_data_queue_semaphore.release()
 
+		if _exception is not None:
+			raise _exception
+
 		def _writing_thread_method():
+			self.__writing_semaphore.acquire()
+			try:
+				_is_running = True
+				while _is_running:
 
-			_is_running = True
-			while _is_running:
+					def _write_method():
+						nonlocal _is_running
+						self.__writing_data_queue_semaphore.acquire()
+						if len(self.__writing_data_queue) == 0:
+							self.__is_writing_thread_running = False
+							_is_running = False
+							self.__writing_data_queue_semaphore.release()
+							self.__writing_threads_running_total_semaphore.acquire()
+							self.__writing_threads_running_total -= 1
+							self.__writing_threads_running_total_semaphore.release()
+						else:
+							_exception = None
+							_blocking_semaphore = None
+							try:
+								_delay_between_packets_seconds, _reader, _blocking_semaphore = self.__writing_data_queue.pop(0)
+								self.__writing_data_queue_semaphore.release()
 
-				self.__writing_data_queue_semaphore.acquire()
-				if len(self.__writing_data_queue) == 0:
-					self.__is_writing_thread_running = False
-					_is_running = False
-					self.__writing_data_queue_semaphore.release()
-					self.__writing_threads_running_total_semaphore.acquire()
-					self.__writing_threads_running_total -= 1
-					self.__writing_threads_running_total_semaphore.release()
-				else:
-					_delay_between_packets_seconds, _reader, _blocking_semaphore = self.__writing_data_queue.pop(0)
-					self.__writing_data_queue_semaphore.release()
+								_text_bytes_length = _reader.get_length()
+								_packet_bytes_length = self.__packet_bytes_length
+								_packets_total = int((_text_bytes_length + _packet_bytes_length - 1) / _packet_bytes_length)
+								_packets_total_bytes = _packets_total.to_bytes(8, "big")
 
-					_text_bytes_length = _reader.get_length()
-					_packet_bytes_length = self.__packet_bytes_length
-					_packets_total = int((_text_bytes_length + _packet_bytes_length - 1) / _packet_bytes_length)
-					_packets_total_bytes = _packets_total.to_bytes(8, "big")
+								self.__read_write_socket.write(_packets_total_bytes)
 
-					self.__read_write_socket.write(_packets_total_bytes)
+								for _packet_index in range(_packets_total):
+									_current_packet_bytes_length = min(_text_bytes_length - _packet_bytes_length * _packet_index, _packet_bytes_length)
+									_current_packet_bytes_length_bytes = _current_packet_bytes_length.to_bytes(8, "big")  # TODO fix based on possible maximum
 
-					for _packet_index in range(_packets_total):
-						_current_packet_bytes_length = min(_text_bytes_length - _packet_bytes_length * _packet_index, _packet_bytes_length)
-						_current_packet_bytes_length_bytes = _current_packet_bytes_length.to_bytes(8, "big")  # TODO fix based on possible maximum
+									self.__read_write_socket.write(_current_packet_bytes_length_bytes)
 
-						self.__read_write_socket.write(_current_packet_bytes_length_bytes)
+									_current_text_bytes_index = _packet_index * _packet_bytes_length
+									_packet_bytes = _reader.get_bytes(_current_text_bytes_index, _current_packet_bytes_length)
 
-						_current_text_bytes_index = _packet_index * _packet_bytes_length
-						_packet_bytes = _reader.get_bytes(_current_text_bytes_index, _current_packet_bytes_length)
+									self.__read_write_socket.write(_packet_bytes)
 
-						self.__read_write_socket.write(_packet_bytes)
+									time.sleep(self.__delay_between_packets_seconds)
 
-						time.sleep(self.__delay_between_packets_seconds)
+								_reader.close()
 
-					_reader.close()
+							except Exception as ex:
+								# saving the exception until after the _blocking_semaphore can be released
+								_exception = ex
 
-					if _blocking_semaphore is not None:
-						_blocking_semaphore.release()
+							if _blocking_semaphore is not None:
+								_blocking_semaphore.release()
 
-				time.sleep(0)  # permit other threads to take action
+							if _exception is not None:
+								raise _exception
+
+					if self.__timeout_seconds is None:
+						_write_method()
+					else:
+						_timeout_thread = TimeoutThread(
+							target=_write_method,
+							timeout_seconds=self.__timeout_seconds
+						)
+						_timeout_thread.start()
+						_is_successful = _timeout_thread.try_wait()
+						if not _is_successful:
+							raise ClientSocketTimeoutException(
+								timeout_thread=_timeout_thread
+							)
+
+					time.sleep(0)  # permit other threads to take action
+
+			except Exception as ex:
+				self.__exception_semaphore.acquire()
+				if self.__exception is None:
+					self.__exception = ex
+				self.__exception_semaphore.release()
+			self.__writing_semaphore.release()
 
 		if _is_writing_thread_needed:
 			self.__writing_threads_running_total_semaphore.acquire()
@@ -998,8 +1071,17 @@ class ClientSocket():
 			_writing_thread = start_thread(_writing_thread_method)
 
 		if not is_async:
+			# this will block the thread if the _write_method throws an unhandled exception
 			_blocking_semaphore.acquire()
 			_blocking_semaphore.release()
+
+		self.__exception_semaphore.acquire()
+		_exception = self.__exception  # get potentially non-null exception
+		self.__exception = None  # clear exception if non-null
+		self.__exception_semaphore.release()
+
+		if _exception is not None:
+			raise _exception
 
 	def write_async(self, text: str):
 
@@ -1048,44 +1130,89 @@ class ClientSocket():
 		_is_reading_thread_needed = not self.__is_reading_thread_running
 		if _is_reading_thread_needed:
 			self.__is_reading_thread_running = True
+
+		self.__exception_semaphore.acquire()
+		_exception = self.__exception  # get potentially non-null exception
+		self.__exception = None  # clear exception if non-null
+		self.__exception_semaphore.release()
+
 		self.__reading_callback_queue_semaphore.release()
 
+		if _exception is not None:
+			raise _exception
+
 		def _reading_thread_method():
+			self.__reading_semaphore.acquire()
+			try:
+				_is_running = True
+				while _is_running:
 
-			_is_running = True
-			while _is_running:
+					def _read_method():
+						nonlocal _is_running
+						self.__reading_callback_queue_semaphore.acquire()
+						if len(self.__reading_callback_queue) == 0:
+							self.__is_reading_thread_running = False
+							_is_running = False
+							self.__reading_callback_queue_semaphore.release()
+							self.__reading_threads_running_total_semaphore.acquire()
+							self.__reading_threads_running_total -= 1
+							self.__reading_threads_running_total_semaphore.release()
+						else:
+							_exception = None
+							_blocking_semaphore = None
+							try:
+								_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
+								self.__reading_callback_queue_semaphore.release()
 
-				self.__reading_callback_queue_semaphore.acquire()
-				if len(self.__reading_callback_queue) == 0:
-					self.__is_reading_thread_running = False
-					_is_running = False
-					self.__reading_callback_queue_semaphore.release()
-					self.__reading_threads_running_total_semaphore.acquire()
-					self.__reading_threads_running_total -= 1
-					self.__reading_threads_running_total_semaphore.release()
-				else:
-					_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
-					self.__reading_callback_queue_semaphore.release()
+								_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
+								_packets_total = int.from_bytes(_packets_total_bytes, "big")
+								_byte_index = 0
+								if _packets_total != 0:
+									for _packet_index in range(_packets_total):
+										_text_bytes_length_string_bytes = self.__read_write_socket.read(8)
+										_text_bytes_length = int.from_bytes(_text_bytes_length_string_bytes, "big")
+										_text_bytes = self.__read_write_socket.read(_text_bytes_length)
+										_builder.write_bytes(_byte_index, _text_bytes)
+										_byte_index += len(_text_bytes)
 
-					_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
-					_packets_total = int.from_bytes(_packets_total_bytes, "big")
-					_byte_index = 0
-					if _packets_total != 0:
-						for _packet_index in range(_packets_total):
-							_text_bytes_length_string_bytes = self.__read_write_socket.read(8)
-							_text_bytes_length = int.from_bytes(_text_bytes_length_string_bytes, "big")
-							_text_bytes = self.__read_write_socket.read(_text_bytes_length)
-							_builder.write_bytes(_byte_index, _text_bytes)
-							_byte_index += len(_text_bytes)
+										time.sleep(self.__delay_between_packets_seconds)
 
-							time.sleep(self.__delay_between_packets_seconds)
+								_callback()
 
-					_callback()
+							except Exception as ex:
+								# saving the exception until after the _blocking_semaphore can be released
+								_exception = ex
 
-					if _blocking_semaphore is not None:
-						_blocking_semaphore.release()
+							if _blocking_semaphore is not None:
+								_blocking_semaphore.release()
 
-				time.sleep(0)  # permit other threads to take action
+							if _exception is not None:
+								raise _exception
+
+						time.sleep(0)  # permit other threads to take action
+
+					if self.__timeout_seconds is None:
+						_read_method()
+					else:
+						_timeout_thread = TimeoutThread(
+							target=_read_method,
+							timeout_seconds=self.__timeout_seconds
+						)
+						_timeout_thread.start()
+						_is_successful = _timeout_thread.try_wait()
+						if not _is_successful:
+							raise ClientSocketTimeoutException(
+								timeout_thread=_timeout_thread
+							)
+
+			except Exception as ex:
+				self.__exception_semaphore.acquire()
+				if self.__exception is None:
+					self.__exception = ex
+				self.__exception_semaphore.release()
+				if not is_async:
+					_blocking_semaphore.release()
+			self.__reading_semaphore.release()
 
 		if _is_reading_thread_needed:
 			self.__reading_threads_running_total_semaphore.acquire()
@@ -1094,8 +1221,17 @@ class ClientSocket():
 			_reading_thread = start_thread(_reading_thread_method)
 
 		if not is_async:
+			# this will block the thread if the _read_method throws an unhandled exception
 			_blocking_semaphore.acquire()
 			_blocking_semaphore.release()
+
+		self.__exception_semaphore.acquire()
+		_exception = self.__exception  # get potentially non-null exception
+		self.__exception = None  # clear exception if non-null
+		self.__exception_semaphore.release()
+
+		if _exception is not None:
+			raise _exception
 
 	def read_async(self, callback):
 
@@ -1165,7 +1301,27 @@ class ClientSocket():
 
 	def close(self):
 
-		self.__read_write_socket.close()
+		# ensure that the read and write threads have had a chance to complete
+		self.__reading_semaphore.acquire()
+		self.__reading_semaphore.release()
+		self.__writing_semaphore.acquire()
+		self.__writing_semaphore.release()
+
+		_close_exception = None
+		try:
+			self.__read_write_socket.close()
+		except Exception as ex:
+			_close_exception = ex
+
+		if self.__exception is not None:
+			if isinstance(self.__exception, ClientSocketTimeoutException):
+				try:
+					self.__exception.get_timeout_thread().try_join()  # this should evaluate immediately if the socket close completed
+				except ConnectionResetError as ex:
+					pass  # expected outcome from closed socket
+			raise self.__exception
+		elif _close_exception is not None:
+			raise _close_exception
 
 
 class ClientSocketFactory():
@@ -1188,7 +1344,7 @@ class ClientSocketFactory():
 
 class ServerSocket():
 
-	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, encryption: Encryption = None, delay_between_packets_seconds: float = 0):
+	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
@@ -1196,6 +1352,7 @@ class ServerSocket():
 		self.__client_read_failed_delay_seconds = client_read_failed_delay_seconds
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
+		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
 
 		self.__host_ip_address = None  # type: str
 		self.__host_port = None  # type: int
@@ -1218,18 +1375,24 @@ class ServerSocket():
 			self.__bindable_address = socket.getaddrinfo(self.__host_ip_address, self.__host_port, 0, socket.SOCK_STREAM)[0][-1]
 
 			def _process_connection_thread_method(connection_socket, address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds: float):
-
-				if address not in self.__blocked_client_addresses:
-					_accepted_socket = ClientSocket(
-						packet_bytes_length=to_client_packet_bytes_length,
-						read_failed_delay_seconds=client_read_failed_delay_seconds,
-						socket=connection_socket,
-						encryption=self.__encryption,
-						delay_between_packets_seconds=self.__delay_between_packets_seconds
-					)
-					_is_valid_client = on_accepted_client_method(_accepted_socket)
-					if _is_valid_client == False:
-						self.__blocked_client_addresses.append(address)
+				try:
+					if address not in self.__blocked_client_addresses:
+						_accepted_socket = ClientSocket(
+							packet_bytes_length=to_client_packet_bytes_length,
+							read_failed_delay_seconds=client_read_failed_delay_seconds,
+							socket=connection_socket,
+							encryption=self.__encryption,
+							delay_between_packets_seconds=self.__delay_between_packets_seconds,
+							timeout_seconds=self.__client_socket_timeout_seconds
+						)
+						_is_valid_client = on_accepted_client_method(_accepted_socket)
+						if _is_valid_client == False:
+							self.__blocked_client_addresses.append(address)
+				except Exception as ex:
+					print(f"ServerSocket: _process_connection_thread_method: {ex}")
+				#connection_socket.shutdown(2)
+				connection_socket.close()
+				#del connection_socket
 
 			def _accepting_thread_method(to_client_packet_bytes_length, on_accepted_client_method, listening_limit_total, accept_timeout_seconds, client_read_failed_delay_seconds):
 				self.__accepting_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1240,7 +1403,7 @@ class ServerSocket():
 				while self.__is_accepting:
 					try:
 						_connection_socket, _address = self.__accepting_socket.accept()
-						_connection_socket.setblocking(False)
+						#_connection_socket.setblocking(False)
 						_connection_thread = start_thread(_process_connection_thread_method, _connection_socket, _address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds)
 					except Exception as ex:
 						if str(ex) == "[Errno 116] ETIMEDOUT":

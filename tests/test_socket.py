@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ThreadCycleCache, ServerSocket, TimeoutThread
+from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, ThreadDelay, start_thread, Encryption, SemaphoreRequestQueue, SemaphoreRequest, ThreadCycle, CyclingUnitOfWork, PreparedSemaphoreRequest, ThreadCycleCache, ServerSocket, TimeoutThread, ClientSocketTimeoutException
 import unittest
 import time
 from datetime import datetime
@@ -591,7 +591,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.stop_accepting_clients()
 
 		_expected_lines = []
-		_messages_total = 100000
+		_messages_total = 10000
 		for _index in range(_messages_total):
 			_expected_lines.append(str(_index))
 		for _expected_line_index, _expected_line in enumerate(_expected_lines):
@@ -1219,9 +1219,13 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		_timeout_thread.start()
 
-		_is_successful = _timeout_thread.join()
+		_wait_is_successful = _timeout_thread.try_wait()
 
-		self.assertFalse(_is_successful)
+		self.assertFalse(_wait_is_successful)
+
+		_join_is_successful = _timeout_thread.try_join()
+
+		self.assertEqual(_wait_is_successful, _join_is_successful)
 
 	def test_timeout_thread_1(self):
 		# will not timeout
@@ -1236,15 +1240,19 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		_timeout_thread.start()
 
-		_is_successful = _timeout_thread.join()
+		_wait_is_successful = _timeout_thread.try_wait()
 
-		self.assertTrue(_is_successful)
+		self.assertTrue(_wait_is_successful)
+
+		_join_is_successful = _timeout_thread.try_join()
+
+		self.assertEqual(_wait_is_successful, _join_is_successful)
 
 	def test_timeout_thread_2(self):
 		# will be on the line between timeout or not
 
 		def _thread_method():
-			time.sleep(0.0999)
+			time.sleep(0.099)
 
 		_outcomes = []
 		for _index in range(100):
@@ -1255,12 +1263,249 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 			_timeout_thread.start()
 
-			_is_successful = _timeout_thread.join()
+			_wait_is_successful = _timeout_thread.try_wait()
 
-			_outcomes.append(_is_successful)
+			_outcomes.append(_wait_is_successful)
+
+			_join_is_successful = _timeout_thread.try_join()
+
+			self.assertEqual(_wait_is_successful, _join_is_successful)
 
 		_is_successful_true_total = len([_outcome for _outcome in _outcomes if _outcome])
 		_is_successful_false_total = len([_outcome for _outcome in _outcomes if not _outcome])
 		print(f"True: {_is_successful_true_total}, False: {_is_successful_false_total}")
 
 		self.assertGreater(_is_successful_true_total, _is_successful_false_total)
+
+	def test_socket_timeout_0(self):
+		# on_accepted_client_method takes too long
+
+		_server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=0.1,
+			client_read_failed_delay_seconds=0.1,
+			client_socket_timeout_seconds=None
+		)
+
+		def _on_accepted_client_method(client_socket: ClientSocket):
+			time.sleep(2)
+			client_socket.close()
+
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_on_accepted_client_method
+		)
+
+		_client_socket = ClientSocket(
+			packet_bytes_length=4096,
+			read_failed_delay_seconds=0.1,
+			timeout_seconds=1.0
+		)
+
+		_client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=_port
+		)
+
+		print("writing...")
+		_client_socket.write("test 0")
+		print("reading...")
+		with self.assertRaises(ClientSocketTimeoutException) as _client_socket_timeout_exception_assert_raises_context:
+			_client_socket.read()
+		print("waiting...")
+		time.sleep(1)
+		print("joining...")
+		with self.assertRaises(ConnectionResetError):
+			_client_socket_timeout_exception_assert_raises_context.exception.get_timeout_thread().try_join()
+		print("_client_socket closing...")
+		_client_socket.close()
+		print("_server_socket stopping...")
+		_server_socket.stop_accepting_clients()
+		print("_server_socket closing...")
+		_server_socket.close()
+
+	def test_socket_on_accepted_client_method_exception_0(self):
+		# exception occurs in on_accepted_client_method
+
+		_server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=0.1,
+			client_read_failed_delay_seconds=0.1,
+			client_socket_timeout_seconds=None
+		)
+
+		def _on_accepted_client_method(client_socket: ClientSocket):
+			raise Exception(f"Test")
+
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_on_accepted_client_method
+		)
+
+		_client_socket = ClientSocket(
+			packet_bytes_length=4096,
+			read_failed_delay_seconds=0.1,
+			timeout_seconds=1.0
+		)
+
+		_client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=_port
+		)
+		print("waiting...")
+		time.sleep(0.5)
+
+		print("writing...")
+		_client_socket.write("test 0")
+		with self.assertRaises(BrokenPipeError) as _broken_pipe_error_exception_assert_raises_context:
+			_client_socket.read()
+		print("_client_socket closing...")
+		_client_socket.close()
+		print("_server_socket stopping...")
+		_server_socket.stop_accepting_clients()
+		print("_server_socket closing...")
+		_server_socket.close()
+
+	def test_socket_on_accepted_client_method_exception_1(self):
+		# exception occurs in on_accepted_client_method and discover on close
+
+		_server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=0.1,
+			client_read_failed_delay_seconds=0.1,
+			client_socket_timeout_seconds=None
+		)
+
+		def _on_accepted_client_method(client_socket: ClientSocket):
+			raise Exception(f"Test")
+
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_on_accepted_client_method
+		)
+
+		_client_socket = ClientSocket(
+			packet_bytes_length=4096,
+			read_failed_delay_seconds=0.1,
+			timeout_seconds=1.0
+		)
+
+		print("connecting...")
+
+		_client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=_port
+		)
+
+		print("waiting...")
+		time.sleep(1)
+
+		print("writing...")
+		_client_socket.write("test 0")
+		print("_client_socket closing...")
+		with self.assertRaises(BrokenPipeError):
+			_client_socket.close()
+		print("_server_socket stopping...")
+		_server_socket.stop_accepting_clients()
+		print("_server_socket closing...")
+		_server_socket.close()
+
+	def test_socket_on_accepted_client_method_exception_2(self):
+		# exception occurs in on_accepted_client_method and discover on read
+
+		_server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=0.1,
+			client_read_failed_delay_seconds=0.1,
+			client_socket_timeout_seconds=None
+		)
+
+		def _on_accepted_client_method(client_socket: ClientSocket):
+			raise Exception(f"Test")
+
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_on_accepted_client_method
+		)
+
+		_client_socket = ClientSocket(
+			packet_bytes_length=4096,
+			read_failed_delay_seconds=0.1,
+			timeout_seconds=1.0
+		)
+
+		print("connecting...")
+
+		_client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=_port
+		)
+
+		print("waiting...")
+		time.sleep(1)
+
+		print("writing...")
+		_client_socket.write("test 0")
+		print("reading...")
+		with self.assertRaises(BrokenPipeError) as _broken_pipe_error_exception_assert_raises_context:
+			_client_socket.read()
+		print("_client_socket closing...")
+		_client_socket.close()
+		print("_server_socket stopping...")
+		_server_socket.stop_accepting_clients()
+		print("_server_socket closing...")
+		_server_socket.close()
+
+	def test_socket_on_accepted_client_method_exception_3(self):
+		# exception occurs in on_accepted_client_method and try to close as fast as possible
+		# NOTE the fact that this test passes makes it clear that feedback should be read from the ClientSocket instead of just write-and-forget processes
+
+		_server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=0.1,
+			client_read_failed_delay_seconds=0.1,
+			client_socket_timeout_seconds=None
+		)
+
+		def _on_accepted_client_method(client_socket: ClientSocket):
+			raise Exception(f"Test")
+
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_on_accepted_client_method
+		)
+
+		_client_socket = ClientSocket(
+			packet_bytes_length=4096,
+			read_failed_delay_seconds=0.1,
+			timeout_seconds=1.0
+		)
+
+		print("connecting...")
+
+		_client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=_port
+		)
+
+		print("writing...")
+		_client_socket.write("")
+
+		print("_client_socket closing...")
+		_client_socket.close()
+		print("_server_socket stopping...")
+		_server_socket.stop_accepting_clients()
+		print("_server_socket closing...")
+		_server_socket.close()
+
+

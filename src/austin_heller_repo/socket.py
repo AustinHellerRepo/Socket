@@ -1,7 +1,9 @@
+print("socket.py: loading: start")
+
 import gc
 gc.collect()
 
-print("socket.py: loading: start")
+print("socket.py: loading: try_mkdir")
 
 def try_mkdir(directory_path) -> bool:
 	import os

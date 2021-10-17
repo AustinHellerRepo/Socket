@@ -1,19 +1,25 @@
+import gc
+gc.collect()
 
-import os
-
+print("socket.py: loading: start")
 
 def try_mkdir(directory_path) -> bool:
+	import os
 	try:
 		os.stat(directory_path)
+		gc.collect()
 		return False
 	except Exception as ex:
+		gc.collect()
 		if "No such file or directory" in str(ex):
 			# normal
 			os.mkdir(directory_path)
+			gc.collect()
 			return True
 		elif "[Errno 2] ENOENT" in str(ex):
 			# micropython
 			os.mkdir(directory_path)
+			gc.collect()
 			return True
 		else:
 			raise ex
@@ -25,15 +31,21 @@ def join_path(*paths):
 		if _full_path[-1] != "/":
 			_full_path += "/"
 		_full_path += _path
+	gc.collect()
 	return _full_path
 
+print("socket.py: loading socket")
 
 try:
 	import usocket as socket
 except ImportError:
+	gc.collect()
+
 	import socket
 
 _is_threading_async = True
+
+print("socket.py: loading start_thread")
 
 try:
 	import threading
@@ -76,6 +88,8 @@ except ImportError:
 				self.__lock.release()
 
 	except ImportError:
+		gc.collect()
+
 		def start_thread(target, *args, **kwargs):
 			target(*args, **kwargs)
 			return None
@@ -96,12 +110,16 @@ except ImportError:
 				if self.__locks_total < 0:
 					raise Exception("Unexpected number of releases.")
 
+print("socket.py: loading json")
+
 try:
 	import ujson as json
 except ImportError:
+	gc.collect()
+
 	import json
 
-import hashlib
+print("socket.py: loading Encryption")
 
 try:
 	import cryptography.fernet
@@ -139,6 +157,7 @@ try:
 			return _decrypted_message_bytes
 
 except ImportError:
+	gc.collect()
 
 	class Encryption():
 
@@ -155,8 +174,11 @@ except ImportError:
 		def decrypt(self, *, encrypted_data: bytes) -> bytes:
 			raise NotImplementedError()
 
+print("socket.py: loading get_machine_guid")
+
 try:
 	import network
+	import hashlib
 
 	def get_machine_guid() -> str:
 		_wlan = network.WLAN()
@@ -168,6 +190,8 @@ try:
 		_guid = _hashed_hex_string[0:8] + "-" + _hashed_hex_string[8:12] + "-" + _hashed_hex_string[12:16] + "-" + _hashed_hex_string[16:20] + "-" + _hashed_hex_string[20:32]
 		return _guid
 except ImportError:
+	gc.collect()
+
 	import uuid
 
 	def get_machine_guid() -> str:
@@ -175,9 +199,11 @@ except ImportError:
 		_guid = str(uuid.UUID(int=_node, version=4))
 		return _guid
 
-import time
-import re
+print("socket.py: loading time")
 
+import time
+
+print("socket.py: loading get_module_from_file_path")
 
 try:
 	import importlib.util
@@ -188,10 +214,13 @@ try:
 		_spec.loader.exec_module(_module)
 		return _module
 except ImportError:
+	gc.collect()
 
 	def get_module_from_file_path(file_path: str, module_name: str):
 		raise NotImplementedError()
 
+
+print("socket.py: loading internal")
 
 class BooleanReference():
 

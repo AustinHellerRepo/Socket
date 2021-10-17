@@ -1066,7 +1066,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		self.assertEqual(0, len(_exceptions))
 
-	def test_module_loader_0(self):
+	def deprecated_test_module_loader_0(self):
 
 		_test_directory_path = "/home/austin/temp/test_socket"
 

@@ -626,7 +626,6 @@ class ClientSocket():
 							self.__reading_threads_running_total -= 1
 							self.__reading_threads_running_total_semaphore.release()
 						else:
-							_exception = None
 							_blocking_semaphore = None
 							try:
 								_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
@@ -648,14 +647,11 @@ class ClientSocket():
 								_callback()
 
 							except Exception as ex:
-								# saving the exception until after the _blocking_semaphore can be released
-								_exception = ex
-
-							if _blocking_semaphore is not None:
-								_blocking_semaphore.release()
-
-							if _exception is not None:
-								raise _exception
+								#print(f"ClientSocket: __read: _reading_thread_method: ex: {ex}")
+								self.__exception = ex
+							finally:
+								if _blocking_semaphore is not None:
+									_blocking_semaphore.release()
 
 						time.sleep(0)  # permit other threads to take action
 
@@ -769,6 +765,8 @@ class ClientSocket():
 
 	def close(self, *, is_forced: bool):
 
+		#print(f"self.__exception: {self.__exception}")
+
 		if not is_forced:
 			# ensure that the read and write threads have had a chance to complete
 			self.__reading_semaphore.acquire()
@@ -861,11 +859,14 @@ class ServerSocket():
 						_is_valid_client = on_accepted_client_method(_accepted_socket)
 						if _is_valid_client == False:
 							self.__blocked_client_addresses.append(address)
-				except Exception as ex:
-					print(f"ServerSocket: _process_connection_thread_method: {ex}")
-				#connection_socket.shutdown(2)
-				connection_socket.close()
-				#del connection_socket
+				#except Exception as ex:
+				#	print(f"ServerSocket: _process_connection_thread_method: {ex}")
+				finally:
+					#print(f"ServerSocket: _process_connection_thread_method: closing connection...")
+					#connection_socket.shutdown(2)
+					connection_socket.close()
+					#del connection_socket
+					#print(f"ServerSocket: _process_connection_thread_method: closed connection.")
 
 			def _accepting_thread_method(to_client_packet_bytes_length, on_accepted_client_method, listening_limit_total, accept_timeout_seconds, client_read_failed_delay_seconds):
 
@@ -893,7 +894,7 @@ class ServerSocket():
 						elif hasattr(socket, "timeout") and isinstance(ex, socket.timeout):
 							pass
 						else:
-							print("ex: " + str(ex))
+							#print("ex: " + str(ex))
 							self.__is_accepting = False
 					if _is_threading_async:
 						time.sleep(0.01)

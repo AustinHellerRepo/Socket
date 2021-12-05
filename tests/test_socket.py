@@ -26,7 +26,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -44,7 +45,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -52,8 +54,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		_server_socket.stop_accepting_clients()
 
@@ -71,7 +72,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -79,23 +81,24 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		time.sleep(1)
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
-			server_read_failed_delay_seconds=0.1
+			server_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_socket = _client_socket_factory.get_client_socket()
 		self.assertIsNotNone(_client_socket)
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
-		_client_socket.close()
+		_client_socket.close(
+			is_forced=False
+		)
 		_server_socket.stop_accepting_clients()
 		_server_socket.close()
 
@@ -108,13 +111,16 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
 			print(f"Connected to client: {client_socket}")
-			client_socket.close()
+			client_socket.close(
+				is_forced=False
+			)
 
 		_server_socket_factory = ServerSocketFactory(
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=_clients_total,
 			accept_timeout_seconds=0.2,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -122,13 +128,13 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		time.sleep(1)
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
-			server_read_failed_delay_seconds=0.1
+			server_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_sockets = []
@@ -139,11 +145,12 @@ class SocketClientFactoryTest(unittest.TestCase):
 		for _client_index in range(_clients_total):
 			_client_sockets[_client_index].connect_to_server(
 				ip_address="0.0.0.0",
-				port=_port,
-				is_ssl=False
+				port=_port
 			)
 		for _client_index in range(_clients_total):
-			_client_sockets[_client_index].close()
+			_client_sockets[_client_index].close(
+				is_forced=False
+			)
 		_server_socket.stop_accepting_clients()
 		_server_socket.close()
 
@@ -160,13 +167,16 @@ class SocketClientFactoryTest(unittest.TestCase):
 			print(f"{_accepted_client_index}: Connected to client at time {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: {client_socket}")
 			_accepted_client_index += 1
 			time.sleep(1)
-			client_socket.close()
+			client_socket.close(
+				is_forced=False
+			)
 
 		_server_socket_factory = ServerSocketFactory(
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=_clients_total,
 			accept_timeout_seconds=30,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -174,16 +184,16 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		time.sleep(1)
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
-			server_read_failed_delay_seconds=0.1
+			server_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_client_socket_factory)
-		_client_sockets = []
+		_client_sockets = []  # type: List[ClientSocket]
 		_client_sockets_threads = []
 		_client_sockets_semaphore = Semaphore()
 
@@ -194,8 +204,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 				self.assertIsNotNone(_client_socket)
 				_client_socket.connect_to_server(
 					ip_address="0.0.0.0",
-					port=_port,
-					is_ssl=False
+					port=_port
 				)
 				_client_sockets_semaphore.acquire()
 				_client_sockets.append(_client_socket)
@@ -211,7 +220,9 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_client_sockets_thread.join()
 		for _client_index in range(len(_client_sockets)):
 			_client_socket = _client_sockets[_client_index]
-			_client_socket.close()
+			_client_socket.close(
+				is_forced=False
+			)
 		_server_socket.stop_accepting_clients()
 		_server_socket.close()
 
@@ -234,7 +245,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -242,31 +254,34 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		time.sleep(1)
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
-			server_read_failed_delay_seconds=0.1
+			server_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_socket = _client_socket_factory.get_client_socket()
 		self.assertIsNotNone(_client_socket)
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
 		_expected_line = "test"
 		_client_socket.write(_expected_line)
-		_client_socket.close()
+		_client_socket.close(
+			is_forced=False
+		)
 		_server_socket.stop_accepting_clients()
 
 		self.assertEqual(1, len(_server_sockets))
 		_actual_line = _server_sockets[0].read()
 		self.assertEqual(_expected_line, _actual_line)
-		_server_sockets[0].close()
+		_server_sockets[0].close(
+			is_forced=False
+		)
 		_server_socket.close()
 
 	def test_client_messages_1(self):
@@ -288,7 +303,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -296,27 +312,28 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		time.sleep(1)
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
-			server_read_failed_delay_seconds=0.1
+			server_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_socket = _client_socket_factory.get_client_socket()
 		self.assertIsNotNone(_client_socket)
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
 		_expected_lines = ["test", "right", "here"]
 		for _expected_line in _expected_lines:
 			_client_socket.write(_expected_line)
 		print(f"closing _client_socket")
-		_client_socket.close()
+		_client_socket.close(
+			is_forced=False
+		)
 		print(f"closed _client_socket")
 		_server_socket.stop_accepting_clients()
 
@@ -325,7 +342,9 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_actual_line = _server_sockets[0].read()
 			self.assertEqual(_expected_line, _actual_line)
 
-		_server_sockets[0].close()
+		_server_sockets[0].close(
+			is_forced=False
+		)
 		_server_socket.close()
 
 	def test_client_messages_2(self):
@@ -346,7 +365,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -354,21 +374,20 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		time.sleep(1)
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
-			server_read_failed_delay_seconds=0.1
+			server_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_socket = _client_socket_factory.get_client_socket()
 		self.assertIsNotNone(_client_socket)
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
 		_server_socket.stop_accepting_clients()
 
@@ -402,8 +421,12 @@ class SocketClientFactoryTest(unittest.TestCase):
 		for _expected_line, _actual_line in zip(_expected_lines, _actual_lines):
 			self.assertEqual(_expected_line, _actual_line)
 
-		_client_socket.close()
-		_server_sockets[0].close()
+		_client_socket.close(
+			is_forced=False
+		)
+		_server_sockets[0].close(
+			is_forced=False
+		)
 		_server_socket.close()
 
 	def test_client_messages_3(self):
@@ -424,7 +447,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -432,21 +456,20 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		time.sleep(1)
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
-			server_read_failed_delay_seconds=0.1
+			server_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_socket = _client_socket_factory.get_client_socket()
 		self.assertIsNotNone(_client_socket)
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
 		_server_socket.stop_accepting_clients()
 
@@ -483,8 +506,12 @@ class SocketClientFactoryTest(unittest.TestCase):
 		for _expected_line, _actual_line in zip(_expected_lines, _actual_lines):
 			self.assertEqual(_expected_line, _actual_line)
 
-		_client_socket.close()
-		_server_sockets[0].close()
+		_client_socket.close(
+			is_forced=False
+		)
+		_server_sockets[0].close(
+			is_forced=False
+		)
 		_server_socket.close()
 
 	def test_get_machine_guid_0(self):
@@ -514,6 +541,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
 			client_read_failed_delay_seconds=0.1,
+			is_ssl=False,
 			encryption=_encryption
 		)
 		self.assertIsNotNone(_server_socket_factory)
@@ -522,13 +550,13 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 		time.sleep(1)
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
 			server_read_failed_delay_seconds=0.1,
+			is_ssl=False,
 			encryption=_encryption
 		)
 		self.assertIsNotNone(_client_socket_factory)
@@ -536,8 +564,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		self.assertIsNotNone(_client_socket)
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
 		_server_socket.stop_accepting_clients()
 
@@ -579,78 +606,13 @@ class SocketClientFactoryTest(unittest.TestCase):
 		for _expected_line, _actual_line in zip(_expected_lines, _actual_lines):
 			self.assertEqual(_expected_line, _actual_line)
 
-		_client_socket.close()
-		_server_sockets[0].close()
+		_client_socket.close(
+			is_forced=False
+		)
+		_server_sockets[0].close(
+			is_forced=False
+		)
 		_server_socket.close()
-
-	def deprecated_test_module_loader_0(self):
-
-		_test_directory_path = "/home/austin/temp/test_socket"
-
-		if True:
-			if not os.path.exists(_test_directory_path):
-				os.mkdir(_test_directory_path)
-			for _file_name in os.listdir(_test_directory_path):
-				_file_path = os.path.join(_test_directory_path, _file_name)
-				if os.path.isfile(_file_path) or os.path.islink(_file_path):
-					os.unlink(_file_path)
-				elif os.path.isdir(_file_path):
-					shutil.rmtree(_file_path)
-
-		_module_loader = ModuleLoader(
-			git_clone_directory_path=_test_directory_path
-		)
-
-		_git_clone_url = "https://github.com/AustinHellerRepo/TestDeviceModule"
-
-		_module_loader.load_module(
-			git_clone_url=_git_clone_url
-		)
-
-		_module_directory_name = _git_clone_url.split("/")[-1]
-		_module_file_name = "module.py"
-
-		# need to alter the reference to austin_heller_repo with prefix "src"
-		_module_file_path = os.path.join(_test_directory_path, _module_directory_name, _module_file_name)
-
-		with open(_module_file_path, "rt") as _file_handle:
-			_file_data = _file_handle.read()
-		_file_data = _file_data.replace("austin_heller_repo", "src.austin_heller_repo")
-		with open(_module_file_path, "wt") as _file_handle:
-			_file_handle.write(_file_data)
-
-		_module = _module_loader.get_module(
-			git_clone_url=_git_clone_url,
-			module_file_name=_module_file_name,
-			module_name=_module_directory_name
-		)
-
-		self.assertIsNotNone(_module)
-
-		_instance = _module.ImplementedModule()  # type: Module
-
-		def _on_instance_sent_message(message: str):
-			print(f"instance sent: \"{message}\"")
-
-		_instance.set_send_method(
-			send_method=_on_instance_sent_message
-		)
-
-		self.assertIsNotNone(_instance)
-
-		_instance.start()
-
-		time.sleep(2.1)
-
-		_instance.receive(
-			data="from test"
-		)
-
-		time.sleep(2.0)
-
-		_instance.stop()
-
-		self.assertEqual("091CEE3D-D683-4B31-ABCE-A0AC568FF14B", _instance.get_purpose_guid())
 
 	def test_upload_and_download_0(self):
 
@@ -671,18 +633,20 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=4096,
 			listening_limit_total=10,
 			accept_timeout_seconds=0.1,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False
 		)
 
 		def _client_connected(client_socket: ClientSocket):
 			client_socket.upload(_source_temp_file.name)
-			client_socket.close()
+			client_socket.close(
+				is_forced=False
+			)
 
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_client_connected,
-			is_ssl=False
+			on_accepted_client_method=_client_connected
 		)
 
 		for _file_size in _file_sizes:
@@ -701,19 +665,21 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 			_client_socket = ClientSocket(
 				packet_bytes_length=4096,
-				read_failed_delay_seconds=0.1
+				read_failed_delay_seconds=0.1,
+				is_ssl=False
 			)
 
 			_client_socket.connect_to_server(
 				ip_address="0.0.0.0",
-				port=_port,
-				is_ssl=False
+				port=_port
 			)
 
 			_destination_temp_file = tempfile.NamedTemporaryFile(delete=False)
 
 			_client_socket.download(_destination_temp_file.name)
-			_client_socket.close()
+			_client_socket.close(
+				is_forced=False
+			)
 
 			with open(_destination_temp_file.name, "rb") as _file_handle:
 				_file_handle.seek(0, 2)
@@ -733,30 +699,32 @@ class SocketClientFactoryTest(unittest.TestCase):
 			listening_limit_total=10,
 			accept_timeout_seconds=0.1,
 			client_read_failed_delay_seconds=0.1,
-			client_socket_timeout_seconds=None
+			client_socket_timeout_seconds=None,
+			is_ssl=False
 		)
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
 			time.sleep(2)
-			client_socket.close()
+			client_socket.close(
+				is_forced=False
+			)
 
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 
 		_client_socket = ClientSocket(
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
-			timeout_seconds=1.0
+			timeout_seconds=1.0,
+			is_ssl=False
 		)
 
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
 
 		print("writing...")
@@ -767,10 +735,12 @@ class SocketClientFactoryTest(unittest.TestCase):
 		print("waiting...")
 		time.sleep(1)
 		print("joining...")
-		with self.assertRaises(ConnectionResetError):
-			_client_socket_timeout_exception_assert_raises_context.exception.get_timeout_thread().try_join()
+		_client_socket_timeout_exception_assert_raises_context.exception.get_timeout_thread().try_join()
 		print("_client_socket closing...")
-		_client_socket.close()
+		with self.assertRaises(ConnectionResetError):
+			_client_socket.close(
+				is_forced=False
+			)
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -784,7 +754,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			listening_limit_total=10,
 			accept_timeout_seconds=0.1,
 			client_read_failed_delay_seconds=0.1,
-			client_socket_timeout_seconds=None
+			client_socket_timeout_seconds=None,
+			is_ssl=False
 		)
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
@@ -793,30 +764,31 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 
 		_client_socket = ClientSocket(
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
-			timeout_seconds=1.0
+			timeout_seconds=1.0,
+			is_ssl=False
 		)
 
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
 		print("waiting...")
 		time.sleep(0.5)
 
 		print("writing...")
-		_client_socket.write("test 0")
 		with self.assertRaises(BrokenPipeError) as _broken_pipe_error_exception_assert_raises_context:
+			_client_socket.write("test 0")
 			_client_socket.read()
 		print("_client_socket closing...")
-		_client_socket.close()
+		_client_socket.close(
+			is_forced=False
+		)
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -824,47 +796,61 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 	def test_socket_on_accepted_client_method_exception_1(self):
 		# exception occurs in on_accepted_client_method and discover on close
+		# NOTE this does not throw an exception because no communication occurs once the exception occurs; the server connection closes normally and then this client socket closes right after
 
 		_server_socket = ServerSocket(
 			to_client_packet_bytes_length=4096,
 			listening_limit_total=10,
 			accept_timeout_seconds=0.1,
 			client_read_failed_delay_seconds=0.1,
-			client_socket_timeout_seconds=None
+			client_socket_timeout_seconds=None,
+			is_ssl=False
 		)
 
+		semaphore = Semaphore()
+		semaphore.acquire()
+
 		def _on_accepted_client_method(client_socket: ClientSocket):
+			nonlocal semaphore
+			semaphore.acquire()
+			semaphore.release()
 			raise Exception(f"Test")
 
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 
 		_client_socket = ClientSocket(
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
-			timeout_seconds=1.0
+			timeout_seconds=1.0,
+			is_ssl=False
 		)
 
 		print("connecting...")
 
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
-
-		print("waiting...")
-		time.sleep(1)
 
 		print("writing...")
 		_client_socket.write("test 0")
+
+		print("releasing semaphore")
+		semaphore.release()
+
+		print("waiting...")
+		time.sleep(2)
+
 		print("_client_socket closing...")
-		with self.assertRaises(BrokenPipeError):
-			_client_socket.close()
+		with self.assertRaises(AssertionError):
+			with self.assertRaises(BrokenPipeError):
+				_client_socket.close(
+					is_forced=False
+				)
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -878,43 +864,55 @@ class SocketClientFactoryTest(unittest.TestCase):
 			listening_limit_total=10,
 			accept_timeout_seconds=0.1,
 			client_read_failed_delay_seconds=0.1,
-			client_socket_timeout_seconds=None
+			client_socket_timeout_seconds=None,
+			is_ssl=False
 		)
 
+		semaphore = Semaphore()
+		semaphore.acquire()
+
 		def _on_accepted_client_method(client_socket: ClientSocket):
+			nonlocal semaphore
+			semaphore.acquire()
+			semaphore.release()
 			raise Exception(f"Test")
 
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 
 		_client_socket = ClientSocket(
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
-			timeout_seconds=1.0
+			timeout_seconds=1.0,
+			is_ssl=False
 		)
 
 		print("connecting...")
 
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
+
+		print("writing...")
+		_client_socket.write("test 0")
+
+		print("releasing semaphore...")
+		semaphore.release()
 
 		print("waiting...")
 		time.sleep(1)
 
-		print("writing...")
-		_client_socket.write("test 0")
-		print("reading...")
-		with self.assertRaises(BrokenPipeError) as _broken_pipe_error_exception_assert_raises_context:
+		with self.assertRaises(ConnectionResetError):
+			print("reading...")
 			_client_socket.read()
 		print("_client_socket closing...")
-		_client_socket.close()
+		_client_socket.close(
+			is_forced=False
+		)
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -929,7 +927,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			listening_limit_total=10,
 			accept_timeout_seconds=0.1,
 			client_read_failed_delay_seconds=0.1,
-			client_socket_timeout_seconds=None
+			client_socket_timeout_seconds=None,
+			is_ssl=False
 		)
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
@@ -938,35 +937,36 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_on_accepted_client_method,
-			is_ssl=False
+			on_accepted_client_method=_on_accepted_client_method
 		)
 
 		_client_socket = ClientSocket(
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
-			timeout_seconds=1.0
+			timeout_seconds=1.0,
+			is_ssl=False
 		)
 
 		print("connecting...")
 
 		_client_socket.connect_to_server(
 			ip_address="0.0.0.0",
-			port=_port,
-			is_ssl=False
+			port=_port
 		)
 
 		print("writing...")
 		_client_socket.write("")
 
 		print("_client_socket closing...")
-		_client_socket.close()
+		_client_socket.close(
+			is_forced=False
+		)
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
 		_server_socket.close()
 
-	def test_upload_and_download_encrypted_0(self):
+	def test_upload_and_download_ssl_0(self):
 
 		_file_sizes = [
 			1024**2,
@@ -985,18 +985,20 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_client_packet_bytes_length=4096,
 			listening_limit_total=10,
 			accept_timeout_seconds=0.1,
-			client_read_failed_delay_seconds=0.1
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=True
 		)
 
 		def _client_connected(client_socket: ClientSocket):
 			client_socket.upload(_source_temp_file.name)
-			client_socket.close()
+			client_socket.close(
+				is_forced=False
+			)
 
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
 			host_port=_port,
-			on_accepted_client_method=_client_connected,
-			is_ssl=True
+			on_accepted_client_method=_client_connected
 		)
 
 		for _file_size in _file_sizes:
@@ -1015,19 +1017,21 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 			_client_socket = ClientSocket(
 				packet_bytes_length=4096,
-				read_failed_delay_seconds=0.1
+				read_failed_delay_seconds=0.1,
+				is_ssl=True
 			)
 
 			_client_socket.connect_to_server(
 				ip_address="",
-				port=_port,
-				is_ssl=True
+				port=_port
 			)
 
 			_destination_temp_file = tempfile.NamedTemporaryFile(delete=False)
 
 			_client_socket.download(_destination_temp_file.name)
-			_client_socket.close()
+			_client_socket.close(
+				is_forced=False
+			)
 
 			with open(_destination_temp_file.name, "rb") as _file_handle:
 				_file_handle.seek(0, 2)

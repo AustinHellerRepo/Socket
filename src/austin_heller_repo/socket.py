@@ -354,10 +354,11 @@ class ClientSocketTimeoutException(Exception):
 
 class ClientSocket():
 
-	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None):
+	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, is_ssl: bool, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None):
 
 		self.__packet_bytes_length = packet_bytes_length
 		self.__read_failed_delay_seconds = read_failed_delay_seconds
+		self.__is_ssl = is_ssl
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__timeout_seconds = timeout_seconds
@@ -404,7 +405,7 @@ class ClientSocket():
 			else:
 				self.__read_write_socket = _read_write_socket
 
-	def connect_to_server(self, *, ip_address: str, port: int, is_ssl: bool):
+	def connect_to_server(self, *, ip_address: str, port: int):
 
 		if self.__socket is not None:
 			raise Exception(f"Cannot connect while already connected.")
@@ -414,7 +415,7 @@ class ClientSocket():
 
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-		if is_ssl:
+		if self.__is_ssl:
 			ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=certifi.where())
 			ssl_context.verify_mode = ssl.CERT_REQUIRED
 			ssl_context.check_hostname = False
@@ -793,10 +794,11 @@ class ClientSocket():
 
 class ClientSocketFactory():
 
-	def __init__(self, *, to_server_packet_bytes_length: int, server_read_failed_delay_seconds: float, encryption: Encryption = None, delay_between_packets_seconds: float = 0):
+	def __init__(self, *, to_server_packet_bytes_length: int, server_read_failed_delay_seconds: float, is_ssl: bool, encryption: Encryption = None, delay_between_packets_seconds: float = 0):
 
 		self.__to_server_packet_bytes_length = to_server_packet_bytes_length
 		self.__server_read_failed_delay_seconds = server_read_failed_delay_seconds
+		self.__is_ssl = is_ssl
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 
@@ -804,6 +806,7 @@ class ClientSocketFactory():
 		return ClientSocket(
 			packet_bytes_length=self.__to_server_packet_bytes_length,
 			read_failed_delay_seconds=self.__server_read_failed_delay_seconds,
+			is_ssl=self.__is_ssl,
 			encryption=self.__encryption,
 			delay_between_packets_seconds=self.__delay_between_packets_seconds
 		)
@@ -811,12 +814,13 @@ class ClientSocketFactory():
 
 class ServerSocket():
 
-	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None):
+	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, is_ssl: bool, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
 		self.__accept_timeout_seconds = accept_timeout_seconds
 		self.__client_read_failed_delay_seconds = client_read_failed_delay_seconds
+		self.__is_ssl = is_ssl
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
@@ -829,7 +833,7 @@ class ServerSocket():
 		self.__accepting_socket = None
 		self.__blocked_client_addresses = []
 
-	def start_accepting_clients(self, *, host_ip_address: str, host_port: int, on_accepted_client_method, is_ssl: bool):
+	def start_accepting_clients(self, *, host_ip_address: str, host_port: int, on_accepted_client_method):
 
 		if self.__is_accepting:
 			raise Exception("Cannot start accepting clients while already accepting.")
@@ -847,6 +851,7 @@ class ServerSocket():
 						_accepted_socket = ClientSocket(
 							packet_bytes_length=to_client_packet_bytes_length,
 							read_failed_delay_seconds=client_read_failed_delay_seconds,
+							is_ssl=self.__is_ssl,
 							socket=connection_socket,
 							encryption=self.__encryption,
 							delay_between_packets_seconds=self.__delay_between_packets_seconds,
@@ -862,11 +867,10 @@ class ServerSocket():
 				#del connection_socket
 
 			def _accepting_thread_method(to_client_packet_bytes_length, on_accepted_client_method, listening_limit_total, accept_timeout_seconds, client_read_failed_delay_seconds):
-				nonlocal is_ssl
 
 				self.__accepting_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-				if is_ssl:
+				if self.__is_ssl:
 					ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=certifi.where())
 					ssl_context.verify_mode = ssl.CERT_REQUIRED
 					ssl_context.check_hostname = False
@@ -922,6 +926,7 @@ class ServerSocketFactory():
 				 listening_limit_total: int,
 				 accept_timeout_seconds: float,
 				 client_read_failed_delay_seconds: float,
+				 is_ssl: bool,
 				 encryption: Encryption = None,
 				 delay_between_packets_seconds: float = 0,
 				 client_socket_timeout_seconds: float = None):
@@ -930,6 +935,7 @@ class ServerSocketFactory():
 		self.__listening_limit_total = listening_limit_total
 		self.__accept_timeout_seconds = accept_timeout_seconds
 		self.__client_read_failed_delay_seconds = client_read_failed_delay_seconds
+		self.__is_ssl = is_ssl
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
@@ -941,6 +947,7 @@ class ServerSocketFactory():
 			listening_limit_total=self.__listening_limit_total,
 			accept_timeout_seconds=self.__accept_timeout_seconds,
 			client_read_failed_delay_seconds=self.__client_read_failed_delay_seconds,
+			is_ssl=self.__is_ssl,
 			encryption=self.__encryption,
 			delay_between_packets_seconds=self.__delay_between_packets_seconds,
 			client_socket_timeout_seconds=self.__client_socket_timeout_seconds

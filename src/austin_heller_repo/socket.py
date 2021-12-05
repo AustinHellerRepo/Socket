@@ -767,13 +767,14 @@ class ClientSocket():
 			is_async=False
 		)
 
-	def close(self):
+	def close(self, *, is_forced: bool):
 
-		# ensure that the read and write threads have had a chance to complete
-		self.__reading_semaphore.acquire()
-		self.__reading_semaphore.release()
-		self.__writing_semaphore.acquire()
-		self.__writing_semaphore.release()
+		if not is_forced:
+			# ensure that the read and write threads have had a chance to complete
+			self.__reading_semaphore.acquire()
+			self.__reading_semaphore.release()
+			self.__writing_semaphore.acquire()
+			self.__writing_semaphore.release()
 
 		_close_exception = None
 		try:

@@ -354,7 +354,7 @@ class ClientSocketTimeoutException(Exception):
 
 class ClientSocket():
 
-	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, is_ssl: bool, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None):
+	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, is_ssl: bool, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__packet_bytes_length = packet_bytes_length
 		self.__read_failed_delay_seconds = read_failed_delay_seconds
@@ -362,6 +362,7 @@ class ClientSocket():
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__timeout_seconds = timeout_seconds
+		self.__is_debug = is_debug
 
 		self.__ip_address = None  # type: str
 		self.__port = None  # type: int
@@ -500,6 +501,8 @@ class ClientSocket():
 								_reader.close()
 
 							except Exception as ex:
+								if self.__is_debug:
+									print(f"ClientSocket: __write: ex: " + str(ex))
 								# saving the exception until after the _blocking_semaphore can be released
 								_exception = ex
 
@@ -647,7 +650,8 @@ class ClientSocket():
 								_callback()
 
 							except Exception as ex:
-								#print(f"ClientSocket: __read: _reading_thread_method: ex: {ex}")
+								if self.__is_debug:
+									print(f"ClientSocket: __read: ex: " + str(ex))
 								self.__exception = ex
 							finally:
 								if _blocking_semaphore is not None:

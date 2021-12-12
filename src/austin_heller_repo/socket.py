@@ -797,13 +797,14 @@ class ClientSocket():
 
 class ClientSocketFactory():
 
-	def __init__(self, *, to_server_packet_bytes_length: int, server_read_failed_delay_seconds: float, is_ssl: bool, encryption: Encryption = None, delay_between_packets_seconds: float = 0):
+	def __init__(self, *, to_server_packet_bytes_length: int, server_read_failed_delay_seconds: float, is_ssl: bool, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
 
 		self.__to_server_packet_bytes_length = to_server_packet_bytes_length
 		self.__server_read_failed_delay_seconds = server_read_failed_delay_seconds
 		self.__is_ssl = is_ssl
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
+		self.__is_debug = is_debug
 
 	def get_client_socket(self) -> ClientSocket:
 		return ClientSocket(
@@ -811,13 +812,14 @@ class ClientSocketFactory():
 			read_failed_delay_seconds=self.__server_read_failed_delay_seconds,
 			is_ssl=self.__is_ssl,
 			encryption=self.__encryption,
-			delay_between_packets_seconds=self.__delay_between_packets_seconds
+			delay_between_packets_seconds=self.__delay_between_packets_seconds,
+			is_debug=self.__is_debug
 		)
 
 
 class ServerSocket():
 
-	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, is_ssl: bool, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None):
+	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, is_ssl: bool, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
@@ -827,6 +829,7 @@ class ServerSocket():
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
+		self.__is_debug = is_debug
 
 		self.__host_ip_address = None  # type: str
 		self.__host_port = None  # type: int
@@ -858,7 +861,8 @@ class ServerSocket():
 							socket=connection_socket,
 							encryption=self.__encryption,
 							delay_between_packets_seconds=self.__delay_between_packets_seconds,
-							timeout_seconds=self.__client_socket_timeout_seconds
+							timeout_seconds=self.__client_socket_timeout_seconds,
+							is_debug=self.__is_debug
 						)
 						_is_valid_client = on_accepted_client_method(_accepted_socket)
 						if _is_valid_client == False:
@@ -935,7 +939,8 @@ class ServerSocketFactory():
 				 is_ssl: bool,
 				 encryption: Encryption = None,
 				 delay_between_packets_seconds: float = 0,
-				 client_socket_timeout_seconds: float = None):
+				 client_socket_timeout_seconds: float = None,
+				 is_debug: bool = False):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
@@ -945,6 +950,7 @@ class ServerSocketFactory():
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
+		self.__is_debug = is_debug
 
 	def get_server_socket(self) -> ServerSocket:
 
@@ -956,5 +962,6 @@ class ServerSocketFactory():
 			is_ssl=self.__is_ssl,
 			encryption=self.__encryption,
 			delay_between_packets_seconds=self.__delay_between_packets_seconds,
-			client_socket_timeout_seconds=self.__client_socket_timeout_seconds
+			client_socket_timeout_seconds=self.__client_socket_timeout_seconds,
+			is_debug=self.__is_debug
 		)

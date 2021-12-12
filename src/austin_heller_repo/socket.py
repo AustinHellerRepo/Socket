@@ -211,6 +211,10 @@ class ReadWriteSocket():
 
 		if self.__readable_socket != self.__socket:
 			del self.__readable_socket
+		try:
+			self.__socket.shutdown(2)
+		except Exception as ex:
+			pass
 		self.__socket.close()
 		del self.__socket
 
@@ -453,6 +457,8 @@ class ClientSocket():
 
 		self.__writing_data_queue_semaphore.release()
 
+		if self.__is_debug:
+			print(f"__write: checking exception at top: {_exception}")
 		if _exception is not None:
 			raise _exception
 
@@ -473,7 +479,6 @@ class ClientSocket():
 							self.__writing_threads_running_total -= 1
 							self.__writing_threads_running_total_semaphore.release()
 						else:
-							_exception = None
 							_blocking_semaphore = None
 							try:
 								_delay_between_packets_seconds, _reader, _blocking_semaphore = self.__writing_data_queue.pop(0)
@@ -504,14 +509,10 @@ class ClientSocket():
 							except Exception as ex:
 								if self.__is_debug:
 									print(f"ClientSocket: __write: ex: " + str(ex))
-								# saving the exception until after the _blocking_semaphore can be released
-								_exception = ex
-
-							if _blocking_semaphore is not None:
-								_blocking_semaphore.release()
-
-							if _exception is not None:
-								raise _exception
+								self.__exception = ex
+							finally:
+								if _blocking_semaphore is not None:
+									_blocking_semaphore.release()
 
 					if self.__timeout_seconds is None:
 						_write_method()
@@ -552,6 +553,8 @@ class ClientSocket():
 		self.__exception = None  # clear exception if non-null
 		self.__exception_semaphore.release()
 
+		if self.__is_debug:
+			print(f"__write: checking exception at bottom: {_exception}")
 		if _exception is not None:
 			raise _exception
 
@@ -610,6 +613,8 @@ class ClientSocket():
 
 		self.__reading_callback_queue_semaphore.release()
 
+		if self.__is_debug:
+			print(f"__read: checking exception at top: {_exception}")
 		if _exception is not None:
 			raise _exception
 
@@ -635,7 +640,12 @@ class ClientSocket():
 								_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
 								self.__reading_callback_queue_semaphore.release()
 
+								if self.__is_debug:
+									print(f"__read: reading packets_total_bytes")
 								_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
+								if self.__is_debug:
+									print(f"__read: read packets_total_bytes: " + str(_packets_total_bytes))
+
 								_packets_total = int.from_bytes(_packets_total_bytes, "big")
 								_byte_index = 0
 								if _packets_total != 0:
@@ -699,6 +709,8 @@ class ClientSocket():
 		self.__exception = None  # clear exception if non-null
 		self.__exception_semaphore.release()
 
+		if self.__is_debug:
+			print(f"__read: checking exception at bottom: {_exception}")
 		if _exception is not None:
 			raise _exception
 
@@ -727,11 +739,17 @@ class ClientSocket():
 			_text = _builder.close()
 			_is_callback_successful = True
 
+		if self.__is_debug:
+			print(f"reading (sync) started")
+
 		self.__read(
 			callback=_builder_callback,
 			builder=_builder,
 			is_async=False
 		)
+
+		if self.__is_debug:
+			print(f"reading (sync) ended")
 
 		if not _is_callback_successful:
 			raise Exception(f"Read process failed to block sync method before returning.")
@@ -782,7 +800,11 @@ class ClientSocket():
 		_close_exception = None
 		try:
 			self.__read_write_socket.close()
+			if self.__is_debug:
+				print(f"deleting read_write_socket")
 			del self.__read_write_socket
+			if self.__is_debug:
+				print(f"deleted read_write_socket")
 		except Exception as ex:
 			_close_exception = ex
 
@@ -869,12 +891,25 @@ class ServerSocket():
 						_is_valid_client = on_accepted_client_method(_accepted_socket)
 						if _is_valid_client == False:
 							self.__blocked_client_addresses.append(address)
-				#except Exception as ex:
-				#	print(f"ServerSocket: _process_connection_thread_method: {ex}")
+				except Exception as ex:
+					if self.__is_debug:
+						print(f"ServerSocket: _process_connection_thread_method: ex: {ex}")
+					try:
+						#connection_socket.shutdown(2)
+						pass
+					except Exception as ex:
+						if self.__is_debug:
+							print(f"ServerSocket: failed to shutdown: {ex}")
+						pass
+					connection_socket.close()
 				finally:
 					#print(f"ServerSocket: _process_connection_thread_method: closing connection...")
-					#connection_socket.shutdown(2)
-					connection_socket.close()
+					if False:  # I think that the state of the client must be determined by the user via the on_accepted_client_method callback
+						try:
+							connection_socket.shutdown(2)
+						except Exception as ex:
+							pass
+						connection_socket.close()
 					#del connection_socket
 					#print(f"ServerSocket: _process_connection_thread_method: closed connection.")
 

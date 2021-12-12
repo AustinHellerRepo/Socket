@@ -1,5 +1,6 @@
 from __future__ import annotations
 from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, Encryption, ServerSocket, ClientSocketTimeoutException
+from austin_heller_repo.threading import start_thread
 import unittest
 import time
 from datetime import datetime
@@ -10,7 +11,7 @@ import base64
 import shutil
 import tempfile
 
-_port = 28776
+_port = 28775
 
 
 class SocketClientFactoryTest(unittest.TestCase):
@@ -304,7 +305,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
 			client_read_failed_delay_seconds=0.1,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=True
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -318,7 +320,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
 			server_read_failed_delay_seconds=0.1,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=True
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_socket = _client_socket_factory.get_client_socket()
@@ -329,6 +332,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		)
 		_expected_lines = ["test", "right", "here"]
 		for _expected_line in _expected_lines:
+			print(f"writing expected line: {_expected_line}")
 			_client_socket.write(_expected_line)
 		print(f"closing _client_socket")
 		_client_socket.close(
@@ -734,13 +738,13 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_client_socket.read()
 		print("waiting...")
 		time.sleep(1)
-		print("joining...")
-		_client_socket_timeout_exception_assert_raises_context.exception.get_timeout_thread().try_join()
+		#print("joining...")
+		#_client_socket_timeout_exception_assert_raises_context.exception.get_timeout_thread().try_join()
 		print("_client_socket closing...")
-		with self.assertRaises(ConnectionResetError):
-			_client_socket.close(
-				is_forced=False
-			)
+		#with self.assertRaises(ConnectionResetError):
+		_client_socket.close(
+			is_forced=False
+		)
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -755,7 +759,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			accept_timeout_seconds=0.1,
 			client_read_failed_delay_seconds=0.1,
 			client_socket_timeout_seconds=None,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=True
 		)
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
@@ -767,11 +772,14 @@ class SocketClientFactoryTest(unittest.TestCase):
 			on_accepted_client_method=_on_accepted_client_method
 		)
 
+		time.sleep(1)
+
 		_client_socket = ClientSocket(
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
 			timeout_seconds=1.0,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=True
 		)
 
 		_client_socket.connect_to_server(
@@ -784,7 +792,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		print("writing...")
 		with self.assertRaises(BrokenPipeError) as _broken_pipe_error_exception_assert_raises_context:
 			_client_socket.write("test 0")
-			_client_socket.read()
+			raise Exception(f"Failed to discover broken pipe in write")
 		print("_client_socket closing...")
 		_client_socket.close(
 			is_forced=False
@@ -829,6 +837,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			is_ssl=False
 		)
 
+		time.sleep(1)
+
 		print("connecting...")
 
 		_client_socket.connect_to_server(
@@ -865,7 +875,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			accept_timeout_seconds=0.1,
 			client_read_failed_delay_seconds=0.1,
 			client_socket_timeout_seconds=None,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=True
 		)
 
 		semaphore = Semaphore()
@@ -883,11 +894,14 @@ class SocketClientFactoryTest(unittest.TestCase):
 			on_accepted_client_method=_on_accepted_client_method
 		)
 
+		time.sleep(1)
+
 		_client_socket = ClientSocket(
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
 			timeout_seconds=1.0,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=True
 		)
 
 		print("connecting...")
@@ -1042,3 +1056,83 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		_server_socket.stop_accepting_clients()
 		_server_socket.close()
+
+	def test_start_reading_then_close(self):
+
+		client_socket = ClientSocket(
+			packet_bytes_length=4096,
+			read_failed_delay_seconds=0.1,
+			is_ssl=False,
+			is_debug=True
+		)
+
+		server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=1.0,
+			client_read_failed_delay_seconds=0.1,
+			is_ssl=False,
+			is_debug=True
+		)
+
+		accepted_client_socket = None  # type: ClientSocket
+		def on_accepted_client_method(client_socket: ClientSocket):
+			nonlocal accepted_client_socket
+			accepted_client_socket = client_socket
+			try:
+				message = client_socket.read()
+				print(f"on_accepted_client_method: message: {message}")
+			except Exception as ex:
+				print(f"on_accepted_client_method: ex: {ex}")
+
+		server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=36429,
+			on_accepted_client_method=on_accepted_client_method
+		)
+
+		client_socket.connect_to_server(
+			ip_address="",
+			port=36429
+		)
+
+		def start_reading_thread_method():
+			nonlocal client_socket
+			try:
+				message = client_socket.read()
+				print(f"start_reading_thread_method: message: {message}")
+			except Exception as ex:
+				print(f"start_reading_thread_method: ex: {ex}")
+
+		def close_client_socket_thread_method():
+			nonlocal client_socket
+			try:
+				client_socket.close(
+					is_forced=True
+				)
+				print(f"close_client_socket_thread_method: closed")
+			except Exception as ex:
+				print(f"close_client_socket_thread_method: ex: {ex}")
+
+		time.sleep(1)
+
+		start_reading_thread = start_thread(start_reading_thread_method)
+
+		time.sleep(1)
+
+		close_client_socket_thread = start_thread(close_client_socket_thread_method)
+
+		time.sleep(1)
+
+		start_reading_thread.join()
+		close_client_socket_thread.join()
+
+		server_socket.stop_accepting_clients()
+		server_socket.close()
+
+		print(f"closing accepted client socket")
+		time.sleep(1)
+		accepted_client_socket.close(
+			is_forced=True
+		)
+		print(f"closed accepted client socket")

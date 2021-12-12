@@ -212,6 +212,7 @@ class ReadWriteSocket():
 		if self.__readable_socket != self.__socket:
 			del self.__readable_socket
 		self.__socket.close()
+		del self.__socket
 
 
 class EncryptedReadWriteSocket():
@@ -781,6 +782,7 @@ class ClientSocket():
 		_close_exception = None
 		try:
 			self.__read_write_socket.close()
+			del self.__read_write_socket
 		except Exception as ex:
 			_close_exception = ex
 

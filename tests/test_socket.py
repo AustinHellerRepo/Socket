@@ -704,7 +704,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			accept_timeout_seconds=0.1,
 			client_read_failed_delay_seconds=0.1,
 			client_socket_timeout_seconds=None,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=True
 		)
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
@@ -723,7 +724,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
 			timeout_seconds=1.0,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=True
 		)
 
 		_client_socket.connect_to_server(

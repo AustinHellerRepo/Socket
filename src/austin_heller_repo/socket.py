@@ -389,6 +389,7 @@ class ClientSocket():
 		self.__exception_semaphore = Semaphore()
 		self.__writing_semaphore = Semaphore()  # block closing while writing
 		self.__reading_semaphore = Semaphore()  # block closing while reading
+		self.__is_closing = False
 
 		self.__initialize()
 
@@ -531,10 +532,13 @@ class ClientSocket():
 					time.sleep(0)  # permit other threads to take action
 
 			except Exception as ex:
-				self.__exception_semaphore.acquire()
-				if self.__exception is None:
-					self.__exception = ex
-				self.__exception_semaphore.release()
+				if not self.__is_closing:
+					self.__exception_semaphore.acquire()
+					if self.__exception is None:
+						self.__exception = ex
+					self.__exception_semaphore.release()
+				if not is_async:
+					_blocking_semaphore.release()
 			self.__writing_semaphore.release()
 
 		if _is_writing_thread_needed:
@@ -685,10 +689,11 @@ class ClientSocket():
 							)
 
 			except Exception as ex:
-				self.__exception_semaphore.acquire()
-				if self.__exception is None:
-					self.__exception = ex
-				self.__exception_semaphore.release()
+				if not self.__is_closing:
+					self.__exception_semaphore.acquire()
+					if self.__exception is None:
+						self.__exception = ex
+					self.__exception_semaphore.release()
 				if not is_async:
 					_blocking_semaphore.release()
 			self.__reading_semaphore.release()
@@ -790,33 +795,42 @@ class ClientSocket():
 
 		#print(f"self.__exception: {self.__exception}")
 
-		if not is_forced:
-			# ensure that the read and write threads have had a chance to complete
-			self.__reading_semaphore.acquire()
-			self.__reading_semaphore.release()
-			self.__writing_semaphore.acquire()
-			self.__writing_semaphore.release()
+		self.__is_closing = True
 
-		_close_exception = None
+		if self.__is_debug:
+			if self.__exception is not None:
+				print(f"closing with pre-existing exception: " + str(self.__exception))
+
 		try:
-			self.__read_write_socket.close()
-			if self.__is_debug:
-				print(f"deleting read_write_socket")
-			del self.__read_write_socket
-			if self.__is_debug:
-				print(f"deleted read_write_socket")
-		except Exception as ex:
-			_close_exception = ex
+			if not is_forced:
+				# ensure that the read and write threads have had a chance to complete
+				self.__reading_semaphore.acquire()
+				self.__reading_semaphore.release()
+				self.__writing_semaphore.acquire()
+				self.__writing_semaphore.release()
 
-		if self.__exception is not None:
-			if isinstance(self.__exception, ClientSocketTimeoutException):
-				try:
-					self.__exception.get_timeout_thread().try_join()  # this should evaluate immediately if the socket close completed
-				except ConnectionResetError as ex:
-					pass  # expected outcome from closed socket
-			raise self.__exception
-		elif _close_exception is not None:
-			raise _close_exception
+			_close_exception = None
+			try:
+				self.__read_write_socket.close()
+				if self.__is_debug:
+					print(f"deleting read_write_socket")
+				del self.__read_write_socket
+				if self.__is_debug:
+					print(f"deleted read_write_socket")
+			except Exception as ex:
+				_close_exception = ex
+
+			if self.__exception is not None:
+				if isinstance(self.__exception, ClientSocketTimeoutException):
+					try:
+						self.__exception.get_timeout_thread().try_join()  # this should evaluate immediately if the socket close completed
+					except ConnectionResetError as ex:
+						pass  # expected outcome from closed socket
+				raise self.__exception
+			elif _close_exception is not None:
+				raise _close_exception
+		finally:
+			self.__is_closing = False
 
 
 class ClientSocketFactory():

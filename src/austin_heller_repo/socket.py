@@ -510,7 +510,11 @@ class ClientSocket():
 							except Exception as ex:
 								if self.__is_debug:
 									print(f"ClientSocket: __write: ex: " + str(ex))
-								self.__exception = ex
+								if not self.__is_closing:
+									self.__exception_semaphore.acquire()
+									if self.__exception is None:
+										self.__exception = ex
+									self.__exception_semaphore.release()
 							finally:
 								if _blocking_semaphore is not None:
 									_blocking_semaphore.release()
@@ -667,7 +671,11 @@ class ClientSocket():
 							except Exception as ex:
 								if self.__is_debug:
 									print(f"ClientSocket: __read: ex: " + str(ex))
-								self.__exception = ex
+								if not self.__is_closing:
+									self.__exception_semaphore.acquire()
+									if self.__exception is None:
+										self.__exception = ex
+									self.__exception_semaphore.release()
 							finally:
 								if _blocking_semaphore is not None:
 									_blocking_semaphore.release()

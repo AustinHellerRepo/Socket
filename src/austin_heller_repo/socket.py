@@ -764,7 +764,7 @@ class ClientSocket():
 		if self.__is_debug:
 			print(f"reading (sync) ended")
 
-		if not _is_callback_successful:
+		if not _is_callback_successful and self.__exception is None:
 			raise Exception(f"Read process failed to block sync method before returning.")
 
 		return _text

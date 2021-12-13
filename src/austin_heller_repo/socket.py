@@ -744,13 +744,10 @@ class ClientSocket():
 
 		_builder = TextBuilder()
 		_text = None
-		_is_callback_successful = False
 
 		def _builder_callback():
 			nonlocal _text
-			nonlocal _is_callback_successful
 			_text = _builder.close()
-			_is_callback_successful = True
 
 		if self.__is_debug:
 			print(f"reading (sync) started")
@@ -763,9 +760,6 @@ class ClientSocket():
 
 		if self.__is_debug:
 			print(f"reading (sync) ended")
-
-		if not _is_callback_successful and self.__exception is None:
-			raise Exception(f"Read process failed to block sync method before returning.")
 
 		return _text
 

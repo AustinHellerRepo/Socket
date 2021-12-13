@@ -720,6 +720,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			on_accepted_client_method=_on_accepted_client_method
 		)
 
+		time.sleep(1)
+
 		_client_socket = ClientSocket(
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
@@ -921,7 +923,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		semaphore.release()
 
 		print("waiting...")
-		time.sleep(1)
+		time.sleep(1.1)
 
 		with self.assertRaises(ConnectionResetError):
 			print("reading...")

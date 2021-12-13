@@ -387,8 +387,8 @@ class ClientSocket():
 		self.__read_started_semaphore = Semaphore()
 		self.__exception = None  # type: Exception
 		self.__exception_semaphore = Semaphore()
-		self.__writing_semaphore = Semaphore()  # block closing while writing
 		self.__is_reading = False
+		self.__is_writing = False
 		self.__is_closing = False
 
 		self.__initialize()
@@ -434,12 +434,147 @@ class ClientSocket():
 		self.__wrap_socket()
 
 	def is_writing(self) -> bool:
-		return self.__writing_threads_running_total > 0
+		return self.__is_writing
 
 	def is_reading(self) -> bool:
 		return self.__is_reading
 
 	def __write(self, *, reader: TextReader or FileReader, is_async: bool):
+
+		_blocking_semaphore = None
+		self.__writing_data_queue_semaphore.acquire()
+		if not is_async:
+			if self.__is_debug:
+				print(f"ClientSocket: __write: setting up blocking semaphore for sync write")
+			_blocking_semaphore = Semaphore()
+			_blocking_semaphore.acquire()
+		self.__writing_data_queue.append((self.__delay_between_packets_seconds, reader, _blocking_semaphore))
+		_is_writing_thread_needed = not self.__is_writing_thread_running
+		if _is_writing_thread_needed:
+			self.__is_writing_thread_running = True
+
+		self.__exception_semaphore.acquire()
+		_exception = self.__exception  # get potentially non-null exception
+		self.__exception = None  # clear exception if non-null
+		self.__exception_semaphore.release()
+
+		self.__writing_data_queue_semaphore.release()
+
+		if self.__is_debug:
+			print(f"__write: checking exception at top: {_exception}")
+		if _exception is not None:
+			raise _exception
+
+		def _writing_thread_method():
+			try:
+				while not self.__is_closing:
+
+					while len(self.__writing_data_queue) == 0 and not self.__is_closing:
+						time.sleep(self.__read_failed_delay_seconds)  # TODO fix for writes instead of using shared read delay seconds
+
+					if not self.__is_closing:
+
+						def _write_method():
+
+							if self.__is_debug:
+								print(f"ClientSocket: __write: _write_method: started")
+
+							_blocking_semaphore = None
+
+							try:
+								if not self.__is_closing:
+									self.__is_writing = True
+									_delay_between_packets_seconds, _reader, _blocking_semaphore = self.__writing_data_queue.pop(0)
+
+									_text_bytes_length = _reader.get_length()
+									_packet_bytes_length = self.__packet_bytes_length
+									_packets_total = int((_text_bytes_length + _packet_bytes_length - 1) / _packet_bytes_length)
+									_packets_total_bytes = _packets_total.to_bytes(8, "big")
+
+									self.__read_write_socket.write(_packets_total_bytes)
+
+									for _packet_index in range(_packets_total):
+										_current_packet_bytes_length = min(_text_bytes_length - _packet_bytes_length * _packet_index, _packet_bytes_length)
+										_current_packet_bytes_length_bytes = _current_packet_bytes_length.to_bytes(8, "big")  # TODO fix based on possible maximum
+
+										self.__read_write_socket.write(_current_packet_bytes_length_bytes)
+
+										_current_text_bytes_index = _packet_index * _packet_bytes_length
+										_packet_bytes = _reader.get_bytes(_current_text_bytes_index, _current_packet_bytes_length)
+
+										self.__read_write_socket.write(_packet_bytes)
+
+										time.sleep(self.__delay_between_packets_seconds)
+
+									_reader.close()
+
+							except Exception as ex:
+								if self.__is_debug:
+									print(f"ClientSocket: __write: 1 ex: " + str(ex))
+								if not self.__is_closing:
+									self.__exception_semaphore.acquire()
+									if self.__exception is None:
+										self.__exception = ex
+									self.__exception_semaphore.release()
+							finally:
+								if len(self.__writing_data_queue) == 0 or self.__is_closing:
+									self.__is_writing = False
+								if _blocking_semaphore is not None:
+									_blocking_semaphore.release()
+									if self.__is_debug:
+										print(f"ClientSocket: __write: unblocking semaphore in finally")
+
+						if self.__timeout_seconds is None:
+							_write_method()
+						else:
+							_timeout_thread = TimeoutThread(
+								target=_write_method,
+								timeout_seconds=self.__timeout_seconds
+							)
+							_timeout_thread.start()
+							_is_successful = _timeout_thread.try_wait()
+							if not _is_successful:
+								if self.__is_debug:
+									print(f"ClientSocket: __write: timeout occurred")
+								raise ClientSocketTimeoutException(
+									timeout_thread=_timeout_thread
+								)
+
+			except Exception as ex:
+				if self.__is_debug:
+					print(f"ClientSocket: __write: 2 ex: {ex}")
+				if not self.__is_closing:
+					self.__exception_semaphore.acquire()
+					if self.__exception is None:
+						self.__exception = ex
+					self.__exception_semaphore.release()
+				if not is_async:  # TODO consider why this is accessing the external context
+					_blocking_semaphore.release()
+			finally:
+				self.__is_writing = False
+
+		if _is_writing_thread_needed:
+			self.__writing_threads_running_total_semaphore.acquire()
+			self.__writing_threads_running_total += 1
+			self.__writing_threads_running_total_semaphore.release()
+			_writing_thread = start_thread(_writing_thread_method)
+
+		if not is_async:
+			# this will block the thread if the _write_method throws an unhandled exception
+			_blocking_semaphore.acquire()
+			_blocking_semaphore.release()
+
+		self.__exception_semaphore.acquire()
+		_exception = self.__exception  # get potentially non-null exception
+		self.__exception = None  # clear exception if non-null
+		self.__exception_semaphore.release()
+
+		if self.__is_debug:
+			print(f"__write: checking exception at bottom: {_exception}")
+		if _exception is not None:
+			raise _exception
+
+	def __write__backup(self, *, reader: TextReader or FileReader, is_async: bool):
 
 		_blocking_semaphore = None
 		self.__writing_data_queue_semaphore.acquire()
@@ -632,92 +767,91 @@ class ClientSocket():
 			try:
 				while not self.__is_closing:
 
-					def _read_method():
+					while len(self.__reading_callback_queue) == 0 and not self.__is_closing:
+						time.sleep(self.__read_failed_delay_seconds)
 
-						#print(f"ClientSocket: __read: _reading_thread_method: waiting for _packets_total_bytes")
+					if not self.__is_closing:
 
-						_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
+						def _read_method():
 
-						#print(f"ClientSocket: __read: _reading_thread_method: found _packets_total_bytes: {_packets_total_bytes}")
+							if self.__is_debug:
+								print(f"ClientSocket: __read: _read_method: started")
 
-						while len(self.__reading_callback_queue) == 0 and not self.__is_closing:
-							time.sleep(self.__read_failed_delay_seconds)
-
-						#print(f"ClientSocket: __read: _reading_thread_method: found queued item or closing")
-
-						if not self.__is_closing:
-							self.__is_reading = True
 							_blocking_semaphore = None
+
 							try:
-								_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
+								if not self.__is_closing:
+									self.__is_reading = True
+									_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
 
-								_packets_total = int.from_bytes(_packets_total_bytes, "big")
-								_byte_index = 0
-								if _packets_total != 0:
-									for _packet_index in range(_packets_total):
-										_text_bytes_length_string_bytes = self.__read_write_socket.read(8)
-										_text_bytes_length = int.from_bytes(_text_bytes_length_string_bytes, "big")
-										_text_bytes = self.__read_write_socket.read(_text_bytes_length)
-										_builder.write_bytes(_byte_index, _text_bytes)
-										_byte_index += len(_text_bytes)
+									_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
+									_packets_total = int.from_bytes(_packets_total_bytes, "big")
+									_byte_index = 0
+									if _packets_total != 0:
+										for _packet_index in range(_packets_total):
+											_text_bytes_length_string_bytes = self.__read_write_socket.read(8)
+											_text_bytes_length = int.from_bytes(_text_bytes_length_string_bytes, "big")
+											_text_bytes = self.__read_write_socket.read(_text_bytes_length)
+											_builder.write_bytes(_byte_index, _text_bytes)
+											_byte_index += len(_text_bytes)
 
-										time.sleep(self.__delay_between_packets_seconds)
+											time.sleep(self.__delay_between_packets_seconds)
 
-								_callback()
+									_callback()
 
 							except Exception as ex:
 								#print(f"ClientSocket: __read: _read_method: ex: {ex}")
 								if self.__is_debug:
-									print(f"ClientSocket: __read: ex: " + str(ex))
+									print(f"ClientSocket: __read: 1 ex: " + str(ex))
 								if not self.__is_closing:
 									self.__exception_semaphore.acquire()
 									if self.__exception is None:
+										if self.__is_debug:
+											print(f"ClientSocket: __read: _reading_thread_method: setting exception: {ex}")
 										self.__exception = ex
 									self.__exception_semaphore.release()
 							finally:
-								self.__is_reading = False
+								if len(self.__reading_callback_queue) == 0 or self.__is_closing:
+									self.__is_reading = False
 								if _blocking_semaphore is not None:
 									_blocking_semaphore.release()
 
-					if self.__timeout_seconds is None:
-						#print(f"ClientSocket: __read: _reading_thread_method: not starting TimeoutThread")
-						_read_method()
-					else:
-						#print(f"ClientSocket: __read: _reading_thread_method: starting TimeoutThread")
-						_timeout_thread = TimeoutThread(
-							target=_read_method,
-							timeout_seconds=self.__timeout_seconds
-						)
-						_timeout_thread.start()
-						_is_successful = _timeout_thread.try_wait()
-						if not _is_successful:
-							raise ClientSocketTimeoutException(
-								timeout_thread=_timeout_thread
+						if self.__timeout_seconds is None:
+							_read_method()
+						else:
+							_timeout_thread = TimeoutThread(
+								target=_read_method,
+								timeout_seconds=self.__timeout_seconds
 							)
-						#print(f"ClientSocket: __read: _reading_thread_method: finished TimeoutThread")
+							_timeout_thread.start()
+							_is_successful = _timeout_thread.try_wait()
+							if not _is_successful:
+								if self.__is_debug:
+									print(f"ClientSocket: __read: timeout failed: existing exception: {self.__exception}")
+								raise ClientSocketTimeoutException(
+									timeout_thread=_timeout_thread
+								)
 
 			except Exception as ex:
-				#print(f"ClientSocket: __read: _reading_thread_method: ex: {ex}")
+				if self.__is_debug:
+					print(f"ClientSocket: __read: _reading_thread_method: 2 ex: {ex}")
 				if not self.__is_closing:
 					self.__exception_semaphore.acquire()
 					if self.__exception is None:
+						if self.__is_debug:
+							print(f"ClientSocket: __read: _reading_thread_method: setting exception: {ex}")
 						self.__exception = ex
 					self.__exception_semaphore.release()
-				if not is_async:
+				if not is_async:  # TODO consider why this is accessing the external context
 					_blocking_semaphore.release()
 			finally:
-				#print(f"ClientSocket: __read: _reading_thread_method: finally")
 				self.__is_reading = False
 
 		if _is_reading_thread_needed:
-			#print(f"ClientSocket: __read: starting reading thread")
 			self.__reading_threads_running_total_semaphore.acquire()
 			self.__reading_threads_running_total += 1
 			self.__reading_threads_running_total_semaphore.release()
 			_reading_thread = start_thread(_reading_thread_method)
-		else:
-			#print(f"ClientSocket: __read: not starting reading thread")
-			pass
 
 		if not is_async:
 			# this will block the thread if the _read_method throws an unhandled exception
@@ -728,8 +862,6 @@ class ClientSocket():
 		_exception = self.__exception  # get potentially non-null exception
 		self.__exception = None  # clear exception if non-null
 		self.__exception_semaphore.release()
-
-		#print(f"ClientSocket: __read: ended")
 
 		if self.__is_debug:
 			print(f"__read: checking exception at bottom: {_exception}")
@@ -938,11 +1070,6 @@ class ClientSocket():
 				print(f"closing with pre-existing exception: " + str(self.__exception))
 
 		try:
-			if not is_forced:
-				# ensure that the read and write threads have had a chance to complete
-				self.__writing_semaphore.acquire()
-				self.__writing_semaphore.release()
-
 			_close_exception = None
 			try:
 				self.__read_write_socket.close()
@@ -964,7 +1091,8 @@ class ClientSocket():
 			elif _close_exception is not None:
 				raise _close_exception
 		finally:
-			self.__is_closing = False
+			#self.__is_closing = False
+			pass
 
 
 class ClientSocketFactory():

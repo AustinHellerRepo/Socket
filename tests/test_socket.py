@@ -751,7 +751,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
 		_server_socket.close()
-		time.sleep(1)
+		time.sleep(3)
 
 	def test_socket_on_accepted_client_method_exception_0(self):
 		# exception occurs in on_accepted_client_method
@@ -1095,6 +1095,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			host_port=36429,
 			on_accepted_client_method=on_accepted_client_method
 		)
+
+		time.sleep(1)
 
 		client_socket.connect_to_server(
 			ip_address="",

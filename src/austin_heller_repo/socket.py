@@ -388,7 +388,7 @@ class ClientSocket():
 		self.__exception = None  # type: Exception
 		self.__exception_semaphore = Semaphore()
 		self.__writing_semaphore = Semaphore()  # block closing while writing
-		self.__reading_semaphore = Semaphore()  # block closing while reading
+		self.__is_reading = False
 		self.__is_closing = False
 
 		self.__initialize()
@@ -437,7 +437,7 @@ class ClientSocket():
 		return self.__writing_threads_running_total > 0
 
 	def is_reading(self) -> bool:
-		return self.__reading_threads_running_total > 0
+		return self.__is_reading
 
 	def __write(self, *, reader: TextReader or FileReader, is_async: bool):
 
@@ -603,6 +603,140 @@ class ClientSocket():
 		)
 
 	def __read(self, *, callback, builder: TextBuilder or FileBuilder, is_async: bool):
+
+		#print(f"ClientSocket: __read: started")
+
+		_blocking_semaphore = None
+		self.__reading_callback_queue_semaphore.acquire()
+		if not is_async:
+			_blocking_semaphore = Semaphore()
+			_blocking_semaphore.acquire()
+		self.__reading_callback_queue.append((self.__delay_between_packets_seconds, callback, builder, _blocking_semaphore))
+		_is_reading_thread_needed = not self.__is_reading_thread_running
+		if _is_reading_thread_needed:
+			self.__is_reading_thread_running = True
+
+		self.__exception_semaphore.acquire()
+		_exception = self.__exception  # get potentially non-null exception
+		self.__exception = None  # clear exception if non-null
+		self.__exception_semaphore.release()
+
+		self.__reading_callback_queue_semaphore.release()
+
+		if self.__is_debug:
+			print(f"__read: checking exception at top: {_exception}")
+		if _exception is not None:
+			raise _exception
+
+		def _reading_thread_method():
+			try:
+				while not self.__is_closing:
+
+					def _read_method():
+
+						#print(f"ClientSocket: __read: _reading_thread_method: waiting for _packets_total_bytes")
+
+						_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
+
+						#print(f"ClientSocket: __read: _reading_thread_method: found _packets_total_bytes: {_packets_total_bytes}")
+
+						while len(self.__reading_callback_queue) == 0 and not self.__is_closing:
+							time.sleep(self.__read_failed_delay_seconds)
+
+						#print(f"ClientSocket: __read: _reading_thread_method: found queued item or closing")
+
+						if not self.__is_closing:
+							self.__is_reading = True
+							_blocking_semaphore = None
+							try:
+								_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
+
+								_packets_total = int.from_bytes(_packets_total_bytes, "big")
+								_byte_index = 0
+								if _packets_total != 0:
+									for _packet_index in range(_packets_total):
+										_text_bytes_length_string_bytes = self.__read_write_socket.read(8)
+										_text_bytes_length = int.from_bytes(_text_bytes_length_string_bytes, "big")
+										_text_bytes = self.__read_write_socket.read(_text_bytes_length)
+										_builder.write_bytes(_byte_index, _text_bytes)
+										_byte_index += len(_text_bytes)
+
+										time.sleep(self.__delay_between_packets_seconds)
+
+								_callback()
+
+							except Exception as ex:
+								#print(f"ClientSocket: __read: _read_method: ex: {ex}")
+								if self.__is_debug:
+									print(f"ClientSocket: __read: ex: " + str(ex))
+								if not self.__is_closing:
+									self.__exception_semaphore.acquire()
+									if self.__exception is None:
+										self.__exception = ex
+									self.__exception_semaphore.release()
+							finally:
+								self.__is_reading = False
+								if _blocking_semaphore is not None:
+									_blocking_semaphore.release()
+
+					if self.__timeout_seconds is None:
+						#print(f"ClientSocket: __read: _reading_thread_method: not starting TimeoutThread")
+						_read_method()
+					else:
+						#print(f"ClientSocket: __read: _reading_thread_method: starting TimeoutThread")
+						_timeout_thread = TimeoutThread(
+							target=_read_method,
+							timeout_seconds=self.__timeout_seconds
+						)
+						_timeout_thread.start()
+						_is_successful = _timeout_thread.try_wait()
+						if not _is_successful:
+							raise ClientSocketTimeoutException(
+								timeout_thread=_timeout_thread
+							)
+						#print(f"ClientSocket: __read: _reading_thread_method: finished TimeoutThread")
+
+			except Exception as ex:
+				#print(f"ClientSocket: __read: _reading_thread_method: ex: {ex}")
+				if not self.__is_closing:
+					self.__exception_semaphore.acquire()
+					if self.__exception is None:
+						self.__exception = ex
+					self.__exception_semaphore.release()
+				if not is_async:
+					_blocking_semaphore.release()
+			finally:
+				#print(f"ClientSocket: __read: _reading_thread_method: finally")
+				self.__is_reading = False
+
+		if _is_reading_thread_needed:
+			#print(f"ClientSocket: __read: starting reading thread")
+			self.__reading_threads_running_total_semaphore.acquire()
+			self.__reading_threads_running_total += 1
+			self.__reading_threads_running_total_semaphore.release()
+			_reading_thread = start_thread(_reading_thread_method)
+		else:
+			#print(f"ClientSocket: __read: not starting reading thread")
+			pass
+
+		if not is_async:
+			# this will block the thread if the _read_method throws an unhandled exception
+			_blocking_semaphore.acquire()
+			_blocking_semaphore.release()
+
+		self.__exception_semaphore.acquire()
+		_exception = self.__exception  # get potentially non-null exception
+		self.__exception = None  # clear exception if non-null
+		self.__exception_semaphore.release()
+
+		#print(f"ClientSocket: __read: ended")
+
+		if self.__is_debug:
+			print(f"__read: checking exception at bottom: {_exception}")
+		if _exception is not None:
+			raise _exception
+
+	def __read__backup(self, *, callback, builder: TextBuilder or FileBuilder, is_async: bool):
 
 		_blocking_semaphore = None
 		self.__reading_callback_queue_semaphore.acquire()
@@ -806,8 +940,6 @@ class ClientSocket():
 		try:
 			if not is_forced:
 				# ensure that the read and write threads have had a chance to complete
-				self.__reading_semaphore.acquire()
-				self.__reading_semaphore.release()
 				self.__writing_semaphore.acquire()
 				self.__writing_semaphore.release()
 

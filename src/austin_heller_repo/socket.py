@@ -167,6 +167,57 @@ except ImportError:
 print("socket.py: loading internal")
 
 
+class ReadWriteSocket_Test():
+
+	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float):
+
+		self.__socket = socket
+		self.__read_failed_delay_seconds = read_failed_delay_seconds
+
+		self.__readable_socket = None
+
+		self.__initialize()
+
+	def __initialize(self):
+
+		self.__socket.setblocking(True)
+		self.__socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+		self.__readable_socket = self.__socket
+
+	def read(self, bytes_length: int) -> bytes:
+
+		_remaining_bytes_length = bytes_length
+		_bytes_packets = []
+		_read_bytes = None
+		while _remaining_bytes_length != 0:
+			_read_bytes = self.__readable_socket.recv(_remaining_bytes_length)
+			if _read_bytes == b"":
+				raise RuntimeError("Socket closed")
+			else:
+				_bytes_packets.append(_read_bytes)
+				_remaining_bytes_length -= len(_read_bytes)
+		_bytes = b"".join(_bytes_packets)
+		return _bytes
+
+	def write(self, data: bytes):
+		_data_bytes_length = len(data)
+		_sent_length_total = 0
+		while _sent_length_total != _data_bytes_length:
+			_sent_length = self.__readable_socket.send(data[_sent_length_total:])
+			if _sent_length == 0:
+				raise RuntimeError("Socket closed")
+			else:
+				_sent_length_total += _sent_length
+
+	def close(self):
+		try:
+			self.__socket.shutdown(2)
+		except Exception as ex:
+			pass
+		self.__socket.close()
+		del self.__socket
+
+
 class ReadWriteSocket():
 
 	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float):
@@ -181,6 +232,7 @@ class ReadWriteSocket():
 	def __initialize(self):
 
 		self.__socket.setblocking(True)
+		self.__socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 		if not hasattr(self.__socket, "readline"):
 			self.__readable_socket = self.__socket.makefile("rwb")
 		else:
@@ -203,12 +255,10 @@ class ReadWriteSocket():
 		return _bytes
 
 	def write(self, data: bytes):
-
 		self.__readable_socket.write(data)
 		self.__readable_socket.flush()
 
 	def close(self):
-
 		if self.__readable_socket != self.__socket:
 			del self.__readable_socket
 		try:

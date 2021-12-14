@@ -1109,9 +1109,7 @@ class ClientSocket():
 			is_async=False
 		)
 
-	def close(self, *, is_forced: bool):
-
-		#print(f"self.__exception: {self.__exception}")
+	def close(self):
 
 		self.__is_closing = True
 
@@ -1119,30 +1117,26 @@ class ClientSocket():
 			if self.__exception is not None:
 				print(f"closing with pre-existing exception: " + str(self.__exception))
 
+		_close_exception = None
 		try:
-			_close_exception = None
-			try:
-				self.__read_write_socket.close()
-				if self.__is_debug:
-					print(f"deleting read_write_socket")
-				del self.__read_write_socket
-				if self.__is_debug:
-					print(f"deleted read_write_socket")
-			except Exception as ex:
-				_close_exception = ex
+			self.__read_write_socket.close()
+			if self.__is_debug:
+				print(f"deleting read_write_socket")
+			del self.__read_write_socket
+			if self.__is_debug:
+				print(f"deleted read_write_socket")
+		except Exception as ex:
+			_close_exception = ex
 
-			if self.__exception is not None:
-				if isinstance(self.__exception, ClientSocketTimeoutException):
-					try:
-						self.__exception.get_timeout_thread().try_join()  # this should evaluate immediately if the socket close completed
-					except ConnectionResetError as ex:
-						pass  # expected outcome from closed socket
-				raise self.__exception
-			elif _close_exception is not None:
-				raise _close_exception
-		finally:
-			#self.__is_closing = False
-			pass
+		if self.__exception is not None:
+			if isinstance(self.__exception, ClientSocketTimeoutException):
+				try:
+					self.__exception.get_timeout_thread().try_join()  # this should evaluate immediately if the socket close completed
+				except ConnectionResetError as ex:
+					pass  # expected outcome from closed socket
+			raise self.__exception
+		elif _close_exception is not None:
+			raise _close_exception
 
 
 class ClientSocketFactory():

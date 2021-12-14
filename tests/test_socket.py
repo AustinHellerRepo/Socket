@@ -98,9 +98,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			ip_address="0.0.0.0",
 			port=_port
 		)
-		_client_socket.close(
-			is_forced=False
-		)
+		_client_socket.close()
 		_server_socket.stop_accepting_clients()
 		_server_socket.close()
 
@@ -113,9 +111,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
 			print(f"Connected to client: {client_socket}")
-			client_socket.close(
-				is_forced=False
-			)
+			client_socket.close()
 
 		_server_socket_factory = ServerSocketFactory(
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
@@ -150,9 +146,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 				port=_port
 			)
 		for _client_index in range(_clients_total):
-			_client_sockets[_client_index].close(
-				is_forced=False
-			)
+			_client_sockets[_client_index].close()
 		_server_socket.stop_accepting_clients()
 		_server_socket.close()
 
@@ -169,9 +163,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			print(f"{_accepted_client_index}: Connected to client at time {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S.%f')}: {client_socket}")
 			_accepted_client_index += 1
 			time.sleep(1)
-			client_socket.close(
-				is_forced=False
-			)
+			client_socket.close()
 
 		_server_socket_factory = ServerSocketFactory(
 			to_client_packet_bytes_length=_to_client_packet_bytes_length,
@@ -222,9 +214,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_client_sockets_thread.join()
 		for _client_index in range(len(_client_sockets)):
 			_client_socket = _client_sockets[_client_index]
-			_client_socket.close(
-				is_forced=False
-			)
+			_client_socket.close()
 		_server_socket.stop_accepting_clients()
 		_server_socket.close()
 
@@ -273,17 +263,13 @@ class SocketClientFactoryTest(unittest.TestCase):
 		)
 		_expected_line = "test"
 		_client_socket.write(_expected_line)
-		_client_socket.close(
-			is_forced=False
-		)
+		_client_socket.close()
 		_server_socket.stop_accepting_clients()
 
 		self.assertEqual(1, len(_server_sockets))
 		_actual_line = _server_sockets[0].read()
 		self.assertEqual(_expected_line, _actual_line)
-		_server_sockets[0].close(
-			is_forced=False
-		)
+		_server_sockets[0].close()
 		_server_socket.close()
 
 	def test_client_messages_1(self):
@@ -336,9 +322,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			print(f"writing expected line: {_expected_line}")
 			_client_socket.write(_expected_line)
 		print(f"closing _client_socket")
-		_client_socket.close(
-			is_forced=False
-		)
+		_client_socket.close()
 		print(f"closed _client_socket")
 		_server_socket.stop_accepting_clients()
 
@@ -347,9 +331,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_actual_line = _server_sockets[0].read()
 			self.assertEqual(_expected_line, _actual_line)
 
-		_server_sockets[0].close(
-			is_forced=False
-		)
+		_server_sockets[0].close()
 		_server_socket.close()
 
 	def test_client_messages_2(self):
@@ -426,12 +408,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 		for _expected_line, _actual_line in zip(_expected_lines, _actual_lines):
 			self.assertEqual(_expected_line, _actual_line)
 
-		_client_socket.close(
-			is_forced=False
-		)
-		_server_sockets[0].close(
-			is_forced=False
-		)
+		_client_socket.close()
+		_server_sockets[0].close()
 		_server_socket.close()
 
 	def test_client_messages_3(self):
@@ -511,12 +489,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 		for _expected_line, _actual_line in zip(_expected_lines, _actual_lines):
 			self.assertEqual(_expected_line, _actual_line)
 
-		_client_socket.close(
-			is_forced=False
-		)
-		_server_sockets[0].close(
-			is_forced=False
-		)
+		_client_socket.close()
+		_server_sockets[0].close()
 		_server_socket.close()
 
 	def test_get_machine_guid_0(self):
@@ -611,12 +585,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 		for _expected_line, _actual_line in zip(_expected_lines, _actual_lines):
 			self.assertEqual(_expected_line, _actual_line)
 
-		_client_socket.close(
-			is_forced=False
-		)
-		_server_sockets[0].close(
-			is_forced=False
-		)
+		_client_socket.close()
+		_server_sockets[0].close()
 		_server_socket.close()
 
 	def test_upload_and_download_0(self):
@@ -644,9 +614,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		def _client_connected(client_socket: ClientSocket):
 			client_socket.upload(_source_temp_file.name)
-			client_socket.close(
-				is_forced=False
-			)
+			client_socket.close()
 
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
@@ -682,9 +650,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_destination_temp_file = tempfile.NamedTemporaryFile(delete=False)
 
 			_client_socket.download(_destination_temp_file.name)
-			_client_socket.close(
-				is_forced=False
-			)
+			_client_socket.close()
 
 			with open(_destination_temp_file.name, "rb") as _file_handle:
 				_file_handle.seek(0, 2)
@@ -711,9 +677,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
 			time.sleep(2)
-			client_socket.close(
-				is_forced=False
-			)
+			client_socket.close()
 
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
@@ -747,9 +711,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		#_client_socket_timeout_exception_assert_raises_context.exception.get_timeout_thread().try_join()
 		print("_client_socket closing...")
 		#with self.assertRaises(ConnectionResetError):
-		_client_socket.close(
-			is_forced=False
-		)
+		_client_socket.close()
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -800,9 +762,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_client_socket.write("test 0")
 			raise Exception(f"Failed to discover broken pipe in write")
 		print("_client_socket closing...")
-		_client_socket.close(
-			is_forced=False
-		)
+		_client_socket.close()
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -864,9 +824,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		print("_client_socket closing...")
 		with self.assertRaises(AssertionError):
 			with self.assertRaises(BrokenPipeError):
-				_client_socket.close(
-					is_forced=False
-				)
+				_client_socket.close()
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -930,9 +888,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			print("reading...")
 			_client_socket.read()
 		print("_client_socket closing...")
-		_client_socket.close(
-			is_forced=False
-		)
+		_client_socket.close()
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -980,9 +936,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_client_socket.write("")
 
 		print("_client_socket closing...")
-		_client_socket.close(
-			is_forced=False
-		)
+		_client_socket.close()
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")
@@ -1013,9 +967,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		def _client_connected(client_socket: ClientSocket):
 			client_socket.upload(_source_temp_file.name)
-			client_socket.close(
-				is_forced=False
-			)
+			client_socket.close()
 
 		_server_socket.start_accepting_clients(
 			host_ip_address="0.0.0.0",
@@ -1051,9 +1003,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			_destination_temp_file = tempfile.NamedTemporaryFile(delete=False)
 
 			_client_socket.download(_destination_temp_file.name)
-			_client_socket.close(
-				is_forced=False
-			)
+			_client_socket.close()
 
 			with open(_destination_temp_file.name, "rb") as _file_handle:
 				_file_handle.seek(0, 2)
@@ -1117,9 +1067,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		def close_client_socket_thread_method():
 			nonlocal client_socket
 			try:
-				client_socket.close(
-					is_forced=True
-				)
+				client_socket.close()
 				print(f"close_client_socket_thread_method: closed")
 			except Exception as ex:
 				print(f"close_client_socket_thread_method: ex: {ex}")
@@ -1142,9 +1090,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		print(f"closing accepted client socket")
 		time.sleep(1)
-		accepted_client_socket.close(
-			is_forced=True
-		)
+		accepted_client_socket.close()
 		print(f"closed accepted client socket")
 
 	def test_send_from_client_to_server(self):
@@ -1227,15 +1173,11 @@ class SocketClientFactoryTest(unittest.TestCase):
 		relay_messages_thread.join()
 		read_messages_thread.join()
 
-		client_socket.close(
-			is_forced=False
-		)
+		client_socket.close()
 
 		time.sleep(1)
 
-		accepted_client_socket.close(
-			is_forced=False
-		)
+		accepted_client_socket.close()
 
 		time.sleep(1)
 

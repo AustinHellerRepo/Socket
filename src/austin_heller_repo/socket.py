@@ -440,12 +440,16 @@ class ClientSocket():
 		self.__is_reading = False
 		self.__is_writing = False
 		self.__is_closing = False
+		self.__read_waiting_semaphore = Semaphore()
+		self.__write_waiting_semaphore = Semaphore()
 
 		self.__initialize()
 
 	def __initialize(self):
 
 		self.__wrap_socket()
+		self.__read_waiting_semaphore.acquire()
+		self.__write_waiting_semaphore.acquire()
 
 	def __wrap_socket(self):
 
@@ -499,6 +503,8 @@ class ClientSocket():
 			_blocking_semaphore = Semaphore()
 			_blocking_semaphore.acquire()
 		self.__writing_data_queue.append((self.__delay_between_packets_seconds, reader, _blocking_semaphore))
+		if len(self.__writing_data_queue) == 1:
+			self.__write_waiting_semaphore.release()
 		_is_writing_thread_needed = not self.__is_writing_thread_running
 		if _is_writing_thread_needed:
 			self.__is_writing_thread_running = True
@@ -519,8 +525,8 @@ class ClientSocket():
 			try:
 				while not self.__is_closing:
 
-					while len(self.__writing_data_queue) == 0 and not self.__is_closing:
-						time.sleep(self.__read_failed_delay_seconds)  # TODO fix for writes instead of using shared read delay seconds
+					self.__write_waiting_semaphore.acquire()
+					self.__write_waiting_semaphore.release()
 
 					if not self.__is_closing:
 
@@ -534,7 +540,11 @@ class ClientSocket():
 							try:
 								if not self.__is_closing:
 									self.__is_writing = True
+									self.__writing_data_queue_semaphore.acquire()
 									_delay_between_packets_seconds, _reader, _blocking_semaphore = self.__writing_data_queue.pop(0)
+									if len(self.__writing_data_queue) == 0:
+										self.__write_waiting_semaphore.acquire()
+									self.__writing_data_queue_semaphore.release()
 
 									_text_bytes_length = _reader.get_length()
 									_packet_bytes_length = self.__packet_bytes_length
@@ -797,6 +807,8 @@ class ClientSocket():
 			_blocking_semaphore = Semaphore()
 			_blocking_semaphore.acquire()
 		self.__reading_callback_queue.append((self.__delay_between_packets_seconds, callback, builder, _blocking_semaphore))
+		if len(self.__reading_callback_queue) == 1:
+			self.__read_waiting_semaphore.release()
 		_is_reading_thread_needed = not self.__is_reading_thread_running
 		if _is_reading_thread_needed:
 			self.__is_reading_thread_running = True
@@ -817,8 +829,8 @@ class ClientSocket():
 			try:
 				while not self.__is_closing:
 
-					while len(self.__reading_callback_queue) == 0 and not self.__is_closing:
-						time.sleep(self.__read_failed_delay_seconds)
+					self.__read_waiting_semaphore.acquire()
+					self.__read_waiting_semaphore.release()
 
 					if not self.__is_closing:
 
@@ -832,7 +844,11 @@ class ClientSocket():
 							try:
 								if not self.__is_closing:
 									self.__is_reading = True
+									self.__reading_callback_queue_semaphore.acquire()
 									_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
+									if len(self.__reading_callback_queue) == 0:
+										self.__read_waiting_semaphore.acquire()
+									self.__reading_callback_queue_semaphore.release()
 
 									_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
 									_packets_total = int.from_bytes(_packets_total_bytes, "big")
@@ -1112,6 +1128,16 @@ class ClientSocket():
 	def close(self):
 
 		self.__is_closing = True
+
+		try:
+			self.__read_waiting_semaphore.release()
+		except Exception as ex:
+			pass
+
+		try:
+			self.__write_waiting_semaphore.release()
+		except Exception as ex:
+			pass
 
 		if self.__is_debug:
 			if self.__exception is not None:

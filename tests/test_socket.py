@@ -942,7 +942,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		print("_server_socket closing...")
 		_server_socket.close()
 
-	def test_upload_and_download_ssl_0(self):
+	def TODO_test_upload_and_download_ssl_0(self):
 
 		_file_sizes = [
 			1024**2,

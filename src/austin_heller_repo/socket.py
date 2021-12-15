@@ -249,6 +249,8 @@ class ReadWriteSocket():
 		while _remaining_bytes_length != 0:
 			_read_bytes = self.__readable_socket.read(_remaining_bytes_length)
 			if _read_bytes is not None:
+				if self.__is_debug:
+					print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes))
 				_bytes_packets.append(_read_bytes)
 				_remaining_bytes_length -= len(_read_bytes)
 			else:

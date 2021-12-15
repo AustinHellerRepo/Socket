@@ -227,6 +227,7 @@ class ReadWriteSocket():
 		self.__is_debug = is_debug
 
 		self.__readable_socket = None
+		self.__is_closing = False
 
 		self.__initialize()
 
@@ -250,7 +251,8 @@ class ReadWriteSocket():
 			_read_bytes = self.__readable_socket.read(_remaining_bytes_length)
 			if _read_bytes is not None:
 				if self.__is_debug:
-					print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes))
+					if _read_bytes == b"":
+						print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes) + " : closing: " + str(self.__is_closing))
 				_bytes_packets.append(_read_bytes)
 				_remaining_bytes_length -= len(_read_bytes)
 			else:
@@ -274,6 +276,7 @@ class ReadWriteSocket():
 	def close(self):
 		if self.__is_debug:
 			print("ReadWriteSocket: close: start")
+		self.__is_closing = True
 		try:
 			if self.__is_debug:
 				print("ReadWriteSocket: close: shutting down socket")

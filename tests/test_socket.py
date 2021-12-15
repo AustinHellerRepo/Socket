@@ -1,5 +1,5 @@
 from __future__ import annotations
-from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, Encryption, ServerSocket, ClientSocketTimeoutException
+from src.austin_heller_repo.socket import ServerSocketFactory, ClientSocket, ClientSocketFactory, Semaphore, get_machine_guid, Encryption, ServerSocket, ClientSocketTimeoutException, ReadWriteSocketClosedException
 from austin_heller_repo.threading import start_thread
 import unittest
 import time
@@ -11,6 +11,7 @@ import base64
 import shutil
 import tempfile
 import matplotlib.pyplot as plt
+import traceback
 
 _port = 28775
 _is_debug = False
@@ -670,7 +671,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.close()
 
 	def test_socket_timeout_0(self):
-		# on_accepted_client_method takes too long
+		# on_accepted_client_method takes too long and then closes the accepted client socket first
 
 		_server_socket = ServerSocket(
 			to_client_packet_bytes_length=4096,
@@ -682,8 +683,13 @@ class SocketClientFactoryTest(unittest.TestCase):
 			is_debug=_is_debug
 		)
 
+		_blocking_semaphore = Semaphore()
+		_blocking_semaphore.acquire()
+
 		def _on_accepted_client_method(client_socket: ClientSocket):
-			time.sleep(2)
+			nonlocal _blocking_semaphore
+			_blocking_semaphore.acquire()
+			_blocking_semaphore.release()
 			client_socket.close()
 
 		_server_socket.start_accepting_clients(
@@ -712,13 +718,75 @@ class SocketClientFactoryTest(unittest.TestCase):
 		print("reading...")
 		with self.assertRaises(ClientSocketTimeoutException) as _client_socket_timeout_exception_assert_raises_context:
 			_client_socket.read()
+
 		print("waiting...")
+		_blocking_semaphore.release()  # allow the accepted_socket to close first
 		time.sleep(1)
-		#print("joining...")
-		#_client_socket_timeout_exception_assert_raises_context.exception.get_timeout_thread().try_join()
+
 		print("_client_socket closing...")
-		#with self.assertRaises(ConnectionResetError):
+		with self.assertRaises(ReadWriteSocketClosedException):
+			_client_socket.close()
+		print("_server_socket stopping...")
+		_server_socket.stop_accepting_clients()
+		print("_server_socket closing...")
+		_server_socket.close()
+		time.sleep(3)
+
+	def test_socket_closing_handling(self):
+		# on_accepted_client_method takes too long and then closes the client socket first
+
+		_server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=0.1,
+			client_read_failed_delay_seconds=0.1,
+			client_socket_timeout_seconds=None,
+			is_ssl=False,
+			is_debug=_is_debug
+		)
+
+		def _on_accepted_client_method(client_socket: ClientSocket):
+			with self.assertRaises(ReadWriteSocketClosedException):
+				message = client_socket.read()
+			client_socket.close()
+
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_on_accepted_client_method
+		)
+
+		time.sleep(1)
+
+		_client_socket = ClientSocket(
+			packet_bytes_length=4096,
+			read_failed_delay_seconds=0.1,
+			timeout_seconds=None,
+			is_ssl=False,
+			is_debug=_is_debug
+		)
+
+		_client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=_port
+		)
+
+		def read_thread_method():
+			print("reading...")
+			with self.assertRaises(ReadWriteSocketClosedException):
+				message = _client_socket.read()
+		read_thread = start_thread(read_thread_method)
+
+		time.sleep(1)
+
+		print("_client_socket closing...")
 		_client_socket.close()
+		time.sleep(1)
+
+		print("waiting...")
+		read_thread.join()
+		time.sleep(1)
+
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")

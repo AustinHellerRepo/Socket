@@ -218,6 +218,14 @@ class ReadWriteSocket_Test():
 		del self.__socket
 
 
+class ReadWriteSocketClosedException(Exception):
+
+	def __init__(self, *args):
+		super().__init__(*args)
+
+		pass
+
+
 class ReadWriteSocket():
 
 	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float, is_debug: bool = False):
@@ -251,11 +259,13 @@ class ReadWriteSocket():
 		while _remaining_bytes_length != 0 and not self.__is_closing:
 			_read_bytes = self.__readable_socket.read(_remaining_bytes_length)
 			if _read_bytes is not None:
-				if self.__is_debug:
-					if _read_bytes == b"":
-						_debug_read_attempts += 1
-						if _debug_read_attempts % 5000000 == 0:
-							print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes) + " : attempts: " + str(_debug_read_attempts) + " : closing: " + str(self.__is_closing))
+				if _read_bytes == b"":
+					raise ReadWriteSocketClosedException()
+				#if self.__is_debug:
+				#	if _read_bytes == b"":
+				#		_debug_read_attempts += 1
+				#		if _debug_read_attempts % 5000000 == 0:
+				#			print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes) + " : attempts: " + str(_debug_read_attempts) + " : closing: " + str(self.__is_closing))
 				_bytes_packets.append(_read_bytes)
 				_remaining_bytes_length -= len(_read_bytes)
 			else:
@@ -776,16 +786,18 @@ class ClientSocket():
 
 							except Exception as ex:
 								#print(f"ClientSocket: __read: _read_method: ex: {ex}")
+								#import traceback
+								#traceback.print_exc()
 								if self.__is_debug:
 									print(f"ClientSocket: __read: 1 ex: " + str(ex))
 									time.sleep(30)
-								if not self.__is_closing:
-									self.__exception_semaphore.acquire()
-									if self.__exception is None:
-										if self.__is_debug:
-											print(f"ClientSocket: __read: _reading_thread_method: setting exception: {ex}")
-										self.__exception = ex
-									self.__exception_semaphore.release()
+								#if not self.__is_closing:
+								self.__exception_semaphore.acquire()
+								if self.__exception is None:
+									if self.__is_debug:
+										print(f"ClientSocket: __read: _reading_thread_method: setting exception: {ex}")
+									self.__exception = ex
+								self.__exception_semaphore.release()
 							finally:
 								if self.__is_debug:
 									print(f"ClientSocket: __read: _reading_thread_method: finally")

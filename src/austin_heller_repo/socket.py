@@ -556,7 +556,6 @@ class ClientSocket():
 				while not self.__is_closing:
 
 					self.__write_waiting_semaphore.acquire()
-					self.__write_waiting_semaphore.release()
 
 					if not self.__is_closing:
 
@@ -572,8 +571,8 @@ class ClientSocket():
 									self.__is_writing = True
 									self.__writing_data_queue_semaphore.acquire()
 									_delay_between_packets_seconds, _reader, _blocking_semaphore = self.__writing_data_queue.pop(0)
-									if len(self.__writing_data_queue) == 0:
-										self.__write_waiting_semaphore.acquire()
+									if len(self.__writing_data_queue) != 0:
+										self.__write_waiting_semaphore.release()
 									self.__writing_data_queue_semaphore.release()
 
 									_text_bytes_length = _reader.get_length()
@@ -733,7 +732,6 @@ class ClientSocket():
 				while not self.__is_closing:
 
 					self.__read_waiting_semaphore.acquire()
-					self.__read_waiting_semaphore.release()
 
 					if not self.__is_closing:
 
@@ -749,8 +747,8 @@ class ClientSocket():
 									self.__is_reading = True
 									self.__reading_callback_queue_semaphore.acquire()
 									_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
-									if len(self.__reading_callback_queue) == 0:
-										self.__read_waiting_semaphore.acquire()
+									if len(self.__reading_callback_queue) != 0:
+										self.__read_waiting_semaphore.release()
 									self.__reading_callback_queue_semaphore.release()
 
 									_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length

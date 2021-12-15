@@ -254,7 +254,7 @@ class ReadWriteSocket():
 				if self.__is_debug:
 					if _read_bytes == b"":
 						_debug_read_attempts += 1
-						if _debug_read_attempts % 100 == 0:
+						if _debug_read_attempts % 5000000 == 0:
 							print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes) + " : attempts: " + str(_debug_read_attempts) + " : closing: " + str(self.__is_closing))
 				_bytes_packets.append(_read_bytes)
 				_remaining_bytes_length -= len(_read_bytes)

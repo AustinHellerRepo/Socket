@@ -970,131 +970,6 @@ class ClientSocket():
 		if _exception is not None:
 			raise _exception
 
-	def __read__backup(self, *, callback, builder: TextBuilder or FileBuilder, is_async: bool):
-
-		_blocking_semaphore = None
-		self.__reading_callback_queue_semaphore.acquire()
-		if not is_async:
-			_blocking_semaphore = Semaphore()
-			_blocking_semaphore.acquire()
-		self.__reading_callback_queue.append((self.__delay_between_packets_seconds, callback, builder, _blocking_semaphore))
-		_is_reading_thread_needed = not self.__is_reading_thread_running
-		if _is_reading_thread_needed:
-			self.__is_reading_thread_running = True
-
-		self.__exception_semaphore.acquire()
-		_exception = self.__exception  # get potentially non-null exception
-		self.__exception = None  # clear exception if non-null
-		self.__exception_semaphore.release()
-
-		self.__reading_callback_queue_semaphore.release()
-
-		if self.__is_debug:
-			print(f"__read: checking exception at top: {_exception}")
-		if _exception is not None:
-			raise _exception
-
-		def _reading_thread_method():
-			self.__reading_semaphore.acquire()
-			try:
-				_is_running = True
-				while _is_running:
-
-					def _read_method():
-						nonlocal _is_running
-						self.__reading_callback_queue_semaphore.acquire()
-						if len(self.__reading_callback_queue) == 0:
-							self.__is_reading_thread_running = False
-							_is_running = False
-							self.__reading_callback_queue_semaphore.release()
-							self.__reading_threads_running_total_semaphore.acquire()
-							self.__reading_threads_running_total -= 1
-							self.__reading_threads_running_total_semaphore.release()
-						else:
-							_blocking_semaphore = None
-							try:
-								_delay_between_packets_seconds, _callback, _builder, _blocking_semaphore = self.__reading_callback_queue.pop(0)
-								self.__reading_callback_queue_semaphore.release()
-
-								if self.__is_debug:
-									print(f"__read: reading packets_total_bytes")
-								_packets_total_bytes = self.__read_write_socket.read(8)  # TODO only send the number of bytes required to transmit based on self.__packet_bytes_length
-								if self.__is_debug:
-									print(f"__read: read packets_total_bytes: " + str(_packets_total_bytes))
-
-								_packets_total = int.from_bytes(_packets_total_bytes, "big")
-								_byte_index = 0
-								if _packets_total != 0:
-									for _packet_index in range(_packets_total):
-										_text_bytes_length_string_bytes = self.__read_write_socket.read(8)
-										_text_bytes_length = int.from_bytes(_text_bytes_length_string_bytes, "big")
-										_text_bytes = self.__read_write_socket.read(_text_bytes_length)
-										_builder.write_bytes(_byte_index, _text_bytes)
-										_byte_index += len(_text_bytes)
-
-										time.sleep(self.__delay_between_packets_seconds)
-
-								_callback()
-
-							except Exception as ex:
-								if self.__is_debug:
-									print(f"ClientSocket: __read: ex: " + str(ex))
-								if not self.__is_closing:
-									self.__exception_semaphore.acquire()
-									if self.__exception is None:
-										self.__exception = ex
-									self.__exception_semaphore.release()
-							finally:
-								if _blocking_semaphore is not None:
-									_blocking_semaphore.release()
-
-						time.sleep(0)  # permit other threads to take action
-
-					if self.__timeout_seconds is None:
-						_read_method()
-					else:
-						_timeout_thread = TimeoutThread(
-							target=_read_method,
-							timeout_seconds=self.__timeout_seconds
-						)
-						_timeout_thread.start()
-						_is_successful = _timeout_thread.try_wait()
-						if not _is_successful:
-							raise ClientSocketTimeoutException(
-								timeout_thread=_timeout_thread
-							)
-
-			except Exception as ex:
-				if not self.__is_closing:
-					self.__exception_semaphore.acquire()
-					if self.__exception is None:
-						self.__exception = ex
-					self.__exception_semaphore.release()
-				if not is_async:
-					_blocking_semaphore.release()
-			self.__reading_semaphore.release()
-
-		if _is_reading_thread_needed:
-			self.__reading_threads_running_total_semaphore.acquire()
-			self.__reading_threads_running_total += 1
-			self.__reading_threads_running_total_semaphore.release()
-			_reading_thread = start_thread(_reading_thread_method)
-
-		if not is_async:
-			# this will block the thread if the _read_method throws an unhandled exception
-			_blocking_semaphore.acquire()
-			_blocking_semaphore.release()
-
-		self.__exception_semaphore.acquire()
-		_exception = self.__exception  # get potentially non-null exception
-		self.__exception = None  # clear exception if non-null
-		self.__exception_semaphore.release()
-
-		if self.__is_debug:
-			print(f"__read: checking exception at bottom: {_exception}")
-		if _exception is not None:
-			raise _exception
-
 	def read_async(self, callback):
 
 		_builder = TextBuilder()
@@ -1298,6 +1173,7 @@ class ServerSocket():
 			def _accepting_thread_method(to_client_packet_bytes_length, on_accepted_client_method, listening_limit_total, accept_timeout_seconds, client_read_failed_delay_seconds):
 
 				self.__accepting_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+				# TODO consider setting the IPPROTO just like the client socket
 
 				if self.__is_ssl:
 					ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=certifi.where())
@@ -1311,11 +1187,15 @@ class ServerSocket():
 				self.__accepting_socket.listen(listening_limit_total)
 				self.__accepting_socket.settimeout(accept_timeout_seconds)
 				while self.__is_accepting:
+					if self.__is_debug:
+						print("ServerSocket: start_accepting_clients: loop started")
 					try:
 						_connection_socket, _address = self.__accepting_socket.accept()
 						#_connection_socket.setblocking(False)
 						_connection_thread = start_thread(_process_connection_thread_method, _connection_socket, _address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds)
 					except Exception as ex:
+						if self.__is_debug:
+							print("ServerSocket: start_accepting_clients: ex: " + str(ex))
 						if str(ex) == "[Errno 116] ETIMEDOUT":
 							pass
 						elif hasattr(socket, "timeout") and isinstance(ex, socket.timeout):

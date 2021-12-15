@@ -247,12 +247,15 @@ class ReadWriteSocket():
 		_remaining_bytes_length = bytes_length
 		_bytes_packets = []
 		_read_bytes = None
-		while _remaining_bytes_length != 0:
+		_debug_read_attempts = 0
+		while _remaining_bytes_length != 0 and not self.__is_closing:
 			_read_bytes = self.__readable_socket.read(_remaining_bytes_length)
 			if _read_bytes is not None:
 				if self.__is_debug:
 					if _read_bytes == b"":
-						print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes) + " : closing: " + str(self.__is_closing))
+						_debug_read_attempts += 1
+						if _debug_read_attempts % 100 == 0:
+							print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes) + " : attempts: " + str(_debug_read_attempts) + " : closing: " + str(self.__is_closing))
 				_bytes_packets.append(_read_bytes)
 				_remaining_bytes_length -= len(_read_bytes)
 			else:

@@ -61,6 +61,12 @@ class SocketClientFactoryTest(unittest.TestCase):
 		)
 		_server_socket.stop_accepting_clients()
 
+		time.sleep(1)
+
+		_server_socket.close()
+
+		time.sleep(1)
+
 	def test_connect_sockets_0(self):
 		# create accepting socket and transmitting socket
 

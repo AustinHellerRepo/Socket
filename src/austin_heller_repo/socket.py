@@ -220,10 +220,11 @@ class ReadWriteSocket_Test():
 
 class ReadWriteSocket():
 
-	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float):
+	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float, is_debug: bool = False):
 
 		self.__socket = socket
 		self.__read_failed_delay_seconds = read_failed_delay_seconds
+		self.__is_debug = is_debug
 
 		self.__readable_socket = None
 
@@ -240,6 +241,8 @@ class ReadWriteSocket():
 
 	def read(self, bytes_length: int) -> bytes:
 
+		if self.__is_debug:
+			print("ReadWriteSocket: read: start")
 		_remaining_bytes_length = bytes_length
 		_bytes_packets = []
 		_read_bytes = None
@@ -249,24 +252,50 @@ class ReadWriteSocket():
 				_bytes_packets.append(_read_bytes)
 				_remaining_bytes_length -= len(_read_bytes)
 			else:
+				if self.__is_debug:
+					print("ReadWriteSocket: read: read_bytes is None")
 				if self.__read_failed_delay_seconds > 0:
 					time.sleep(self.__read_failed_delay_seconds)
 		_bytes = b"".join(_bytes_packets)
+
+		if self.__is_debug:
+			print("ReadWriteSocket: read: end")
+
 		return _bytes
 
 	def write(self, data: bytes):
+		if self.__is_debug:
+			print("ReadWriteSocket: write: writing message: " + str(data))
 		self.__readable_socket.write(data)
 		self.__readable_socket.flush()
 
 	def close(self):
+		if self.__is_debug:
+			print("ReadWriteSocket: close: start")
 		if self.__readable_socket != self.__socket:
+			if self.__is_debug:
+				print("ReadWriteSocket: close: deleting readable_socket")
+				time.sleep(30)
 			del self.__readable_socket
 		try:
+			if self.__is_debug:
+				print("ReadWriteSocket: close: shutting down socket")
+				time.sleep(30)
 			self.__socket.shutdown(2)
 		except Exception as ex:
-			pass
+			if self.__is_debug:
+				print("ReadWriteSocket: close: failed to shutdown socket: " + str(ex))
+		if self.__is_debug:
+			print("ReadWriteSocket: close: closing socket")
+			time.sleep(30)
 		self.__socket.close()
+		if self.__is_debug:
+			print("ReadWriteSocket: close: deleting socket")
+			time.sleep(30)
 		del self.__socket
+		if self.__is_debug:
+			print("ReadWriteSocket: close: start")
+			time.sleep(30)
 
 
 class EncryptedReadWriteSocket():
@@ -456,7 +485,8 @@ class ClientSocket():
 		if self.__socket is not None:
 			_read_write_socket = ReadWriteSocket(
 				socket=self.__socket,
-				read_failed_delay_seconds=self.__read_failed_delay_seconds
+				read_failed_delay_seconds=self.__read_failed_delay_seconds,
+				is_debug=self.__is_debug
 			)
 			if self.__encryption is not None:
 				self.__read_write_socket = EncryptedReadWriteSocket(

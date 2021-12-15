@@ -907,14 +907,20 @@ class ClientSocket():
 										self.__exception = ex
 									self.__exception_semaphore.release()
 							finally:
+								if self.__is_debug:
+									print(f"ClientSocket: __read: _reading_thread_method: finally")
 								if len(self.__reading_callback_queue) == 0 or self.__is_closing:
 									self.__is_reading = False
 								if _blocking_semaphore is not None:
 									_blocking_semaphore.release()
 
 						if self.__timeout_seconds is None:
+							if self.__is_debug:
+								print(f"ClientSocket: __read: _reading_thread_method: starting _read_method")
 							_read_method()
 						else:
+							if self.__is_debug:
+								print(f"ClientSocket: __read: _reading_thread_method: starting _timeout_thread")
 							_timeout_thread = TimeoutThread(
 								target=_read_method,
 								timeout_seconds=self.__timeout_seconds

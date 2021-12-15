@@ -13,6 +13,7 @@ import tempfile
 import matplotlib.pyplot as plt
 
 _port = 28775
+_is_debug = False
 
 
 class SocketClientFactoryTest(unittest.TestCase):
@@ -293,7 +294,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			accept_timeout_seconds=0.2,
 			client_read_failed_delay_seconds=0.1,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -308,7 +309,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
 			server_read_failed_delay_seconds=0.1,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_socket = _client_socket_factory.get_client_socket()
@@ -672,7 +673,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			client_read_failed_delay_seconds=0.1,
 			client_socket_timeout_seconds=None,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
@@ -692,7 +693,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			read_failed_delay_seconds=0.1,
 			timeout_seconds=1.0,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 
 		_client_socket.connect_to_server(
@@ -728,7 +729,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			client_read_failed_delay_seconds=0.1,
 			client_socket_timeout_seconds=None,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 
 		def _on_accepted_client_method(client_socket: ClientSocket):
@@ -747,7 +748,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			read_failed_delay_seconds=0.1,
 			timeout_seconds=1.0,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 
 		_client_socket.connect_to_server(
@@ -840,7 +841,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			client_read_failed_delay_seconds=0.1,
 			client_socket_timeout_seconds=None,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 
 		semaphore = Semaphore()
@@ -865,7 +866,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			read_failed_delay_seconds=0.1,
 			timeout_seconds=1.0,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 
 		print("connecting...")
@@ -1021,7 +1022,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0.1,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 
 		server_socket = ServerSocket(
@@ -1030,7 +1031,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			accept_timeout_seconds=1.0,
 			client_read_failed_delay_seconds=0.1,
 			is_ssl=False,
-			is_debug=True
+			is_debug=_is_debug
 		)
 
 		accepted_client_socket = None  # type: ClientSocket
@@ -1101,7 +1102,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			packet_bytes_length=4096,
 			read_failed_delay_seconds=0,
 			is_ssl=False,
-			is_debug=False
+			is_debug=_is_debug
 		)
 
 		server_socket = ServerSocket(
@@ -1110,7 +1111,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			accept_timeout_seconds=1.0,
 			client_read_failed_delay_seconds=0,
 			is_ssl=False,
-			is_debug=False
+			is_debug=_is_debug
 		)
 
 		write_datetimes = []  # type: List[datetime]

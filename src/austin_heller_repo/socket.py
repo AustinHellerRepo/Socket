@@ -272,11 +272,6 @@ class ReadWriteSocket():
 	def close(self):
 		if self.__is_debug:
 			print("ReadWriteSocket: close: start")
-		if self.__readable_socket != self.__socket:
-			if self.__is_debug:
-				print("ReadWriteSocket: close: deleting readable_socket")
-				time.sleep(30)
-			del self.__readable_socket
 		try:
 			if self.__is_debug:
 				print("ReadWriteSocket: close: shutting down socket")
@@ -289,6 +284,11 @@ class ReadWriteSocket():
 			print("ReadWriteSocket: close: closing socket")
 			time.sleep(30)
 		self.__socket.close()
+		if self.__readable_socket != self.__socket:
+			if self.__is_debug:
+				print("ReadWriteSocket: close: deleting readable_socket")
+				time.sleep(30)
+			del self.__readable_socket
 		if self.__is_debug:
 			print("ReadWriteSocket: close: deleting socket")
 			time.sleep(30)

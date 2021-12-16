@@ -724,8 +724,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		time.sleep(1)
 
 		print("_client_socket closing...")
-		with self.assertRaises(ReadWriteSocketClosedException):
-			_client_socket.close()
+		_client_socket.close()
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")

@@ -258,21 +258,11 @@ class ReadWriteSocket():
 		_debug_read_attempts = 0
 		while _remaining_bytes_length != 0 and not self.__is_closing:
 			_read_bytes = self.__readable_socket.read(_remaining_bytes_length)
-			if _read_bytes is not None:
-				if _read_bytes == b"":
-					raise ReadWriteSocketClosedException()
-				#if self.__is_debug:
-				#	if _read_bytes == b"":
-				#		_debug_read_attempts += 1
-				#		if _debug_read_attempts % 5000000 == 0:
-				#			print("ReadWriteSocket: read: read_bytes found: " + str(_read_bytes) + " : attempts: " + str(_debug_read_attempts) + " : closing: " + str(self.__is_closing))
-				_bytes_packets.append(_read_bytes)
-				_remaining_bytes_length -= len(_read_bytes)
-			else:
-				if self.__is_debug:
-					print("ReadWriteSocket: read: read_bytes is None")
-				if self.__read_failed_delay_seconds > 0:
-					time.sleep(self.__read_failed_delay_seconds)
+			_read_bytes_length = len(_read_bytes)
+			if _read_bytes_length == 0:
+				raise ReadWriteSocketClosedException()
+			_bytes_packets.append(_read_bytes)
+			_remaining_bytes_length -= _read_bytes_length
 		_bytes = b"".join(_bytes_packets)
 
 		if self.__is_debug:
@@ -951,7 +941,7 @@ class ClientSocket():
 		except Exception as ex:
 			_close_exception = ex
 
-		if self.__exception is not None:
+		if self.__exception is not None and not isinstance(self.__exception, ReadWriteSocketClosedException):
 			if isinstance(self.__exception, ClientSocketTimeoutException):
 				try:
 					self.__exception.get_timeout_thread().try_join()  # this should evaluate immediately if the socket close completed

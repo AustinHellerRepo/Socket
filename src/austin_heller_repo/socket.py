@@ -293,27 +293,22 @@ class ReadWriteSocket():
 		try:
 			if self.__is_debug:
 				print("ReadWriteSocket: close: shutting down socket")
-				time.sleep(30)
 			self.__socket.shutdown(2)
 		except Exception as ex:
 			if self.__is_debug:
 				print("ReadWriteSocket: close: failed to shutdown socket: " + str(ex))
 		if self.__is_debug:
 			print("ReadWriteSocket: close: closing socket")
-			time.sleep(30)
 		self.__socket.close()
 		if self.__readable_socket != self.__socket:
 			if self.__is_debug:
 				print("ReadWriteSocket: close: deleting readable_socket")
-				time.sleep(30)
 			del self.__readable_socket
 		if self.__is_debug:
 			print("ReadWriteSocket: close: deleting socket")
-			time.sleep(30)
 		del self.__socket
 		if self.__is_debug:
-			print("ReadWriteSocket: close: start")
-			time.sleep(30)
+			print("ReadWriteSocket: close: end")
 
 
 class EncryptedReadWriteSocket():
@@ -790,7 +785,6 @@ class ClientSocket():
 								#traceback.print_exc()
 								if self.__is_debug:
 									print(f"ClientSocket: __read: 1 ex: " + str(ex))
-									time.sleep(30)
 								#if not self.__is_closing:
 								self.__exception_semaphore.acquire()
 								if self.__exception is None:

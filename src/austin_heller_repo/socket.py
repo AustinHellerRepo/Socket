@@ -1059,6 +1059,7 @@ class ServerSocket():
 					#self.__accepting_socket = ssl.wrap_socket(self.__accepting_socket, ssl_version=ssl.PROTOCOL_TLS)
 
 				self.__accepting_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+				self.__accepting_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 				self.__accepting_socket.bind(self.__bindable_address)
 				self.__accepting_socket.listen(listening_limit_total)
 				self.__accepting_socket.settimeout(accept_timeout_seconds)
@@ -1101,6 +1102,7 @@ class ServerSocket():
 		if self.__is_accepting:
 			raise Exception("Cannot close without first stopping accepting clients.")
 		else:
+			self.__accepting_socket.shutdown(2)
 			self.__accepting_socket.close()
 
 

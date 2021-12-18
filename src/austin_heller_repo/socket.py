@@ -781,13 +781,13 @@ class ClientSocket():
 								#traceback.print_exc()
 								if self.__is_debug:
 									print(f"ClientSocket: __read: 1 ex: " + str(ex))
-								#if not self.__is_closing:
-								self.__exception_semaphore.acquire()
-								if self.__exception is None:
-									if self.__is_debug:
-										print(f"ClientSocket: __read: _reading_thread_method: setting exception: {ex}")
-									self.__exception = ex
-								self.__exception_semaphore.release()
+								if not self.__is_closing:
+									self.__exception_semaphore.acquire()
+									if self.__exception is None:
+										if self.__is_debug:
+											print(f"ClientSocket: __read: _reading_thread_method: setting exception: {ex}")
+										self.__exception = ex
+									self.__exception_semaphore.release()
 							finally:
 								if self.__is_debug:
 									print(f"ClientSocket: __read: _reading_thread_method: finally")

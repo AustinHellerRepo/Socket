@@ -246,7 +246,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 			listening_limit_total=1,
 			accept_timeout_seconds=0.2,
 			client_read_failed_delay_seconds=0.1,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=_is_debug
 		)
 		self.assertIsNotNone(_server_socket_factory)
 		_server_socket = _server_socket_factory.get_server_socket()
@@ -260,7 +261,8 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_client_socket_factory = ClientSocketFactory(
 			to_server_packet_bytes_length=_to_server_packet_bytes_length,
 			server_read_failed_delay_seconds=0.1,
-			is_ssl=False
+			is_ssl=False,
+			is_debug=_is_debug
 		)
 		self.assertIsNotNone(_client_socket_factory)
 		_client_socket = _client_socket_factory.get_client_socket()
@@ -676,7 +678,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket = ServerSocket(
 			to_client_packet_bytes_length=4096,
 			listening_limit_total=10,
-			accept_timeout_seconds=0.1,
+			accept_timeout_seconds=1.0,
 			client_read_failed_delay_seconds=0.1,
 			client_socket_timeout_seconds=None,
 			is_ssl=False,
@@ -731,7 +733,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_socket.close()
 		time.sleep(3)
 
-	def test_socket_closing_handling(self):
+	def test_socket_timeout_1(self):
 		# on_accepted_client_method takes too long and then closes the client socket first
 
 		_server_socket = ServerSocket(
@@ -774,6 +776,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 			print("reading...")
 			with self.assertRaises(ReadWriteSocketClosedException):
 				message = _client_socket.read()
+				print(f"read message: \"{message}\"")
 		read_thread = start_thread(read_thread_method)
 
 		time.sleep(1)
@@ -786,6 +789,68 @@ class SocketClientFactoryTest(unittest.TestCase):
 		read_thread.join()
 		time.sleep(1)
 
+		print("_server_socket stopping...")
+		_server_socket.stop_accepting_clients()
+		print("_server_socket closing...")
+		_server_socket.close()
+		time.sleep(3)
+
+	def test_socket_timeout_2(self):
+		# on_accepted_client_method takes too long and then closes the accepted client socket first but then the on_accepted_client_method takes a long time to end
+
+		_server_socket = ServerSocket(
+			to_client_packet_bytes_length=4096,
+			listening_limit_total=10,
+			accept_timeout_seconds=1.0,
+			client_read_failed_delay_seconds=0.1,
+			client_socket_timeout_seconds=None,
+			is_ssl=False,
+			is_debug=_is_debug
+		)
+
+		_blocking_semaphore = Semaphore()
+		_blocking_semaphore.acquire()
+
+		def _on_accepted_client_method(client_socket: ClientSocket):
+			nonlocal _blocking_semaphore
+			_blocking_semaphore.acquire()
+			_blocking_semaphore.release()
+			client_socket.close()
+			time.sleep(5)
+
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_on_accepted_client_method
+		)
+
+		time.sleep(1)
+
+		_client_socket = ClientSocket(
+			packet_bytes_length=4096,
+			read_failed_delay_seconds=0.1,
+			timeout_seconds=1.0,
+			is_ssl=False,
+			is_debug=_is_debug
+		)
+
+		_client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=_port
+		)
+
+		print("writing...")
+		_client_socket.write("test 0")
+		print("reading...")
+		with self.assertRaises(ClientSocketTimeoutException) as _client_socket_timeout_exception_assert_raises_context:
+			_client_socket.read()
+
+		print("waiting...")
+		_blocking_semaphore.release()  # allow the accepted_socket to close first
+		time.sleep(1)
+
+		print("_client_socket closing...")
+		_client_socket.close()
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()
 		print("_server_socket closing...")

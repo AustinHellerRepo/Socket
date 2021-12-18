@@ -256,13 +256,16 @@ class ReadWriteSocket():
 		_bytes_packets = []
 		_read_bytes = None
 		_debug_read_attempts = 0
-		while _remaining_bytes_length != 0 and not self.__is_closing:
-			_read_bytes = self.__readable_socket.read(_remaining_bytes_length)
-			_read_bytes_length = len(_read_bytes)
-			if _read_bytes_length == 0:
-				raise ReadWriteSocketClosedException()
-			_bytes_packets.append(_read_bytes)
-			_remaining_bytes_length -= _read_bytes_length
+		try:
+			while _remaining_bytes_length != 0 and not self.__is_closing:
+				_read_bytes = self.__readable_socket.read(_remaining_bytes_length)
+				_read_bytes_length = len(_read_bytes)
+				if _read_bytes_length == 0:
+					raise ReadWriteSocketClosedException()
+				_bytes_packets.append(_read_bytes)
+				_remaining_bytes_length -= _read_bytes_length
+		except BrokenPipeError as ex:
+			raise ReadWriteSocketClosedException()
 		_bytes = b"".join(_bytes_packets)
 
 		if self.__is_debug:
@@ -273,8 +276,11 @@ class ReadWriteSocket():
 	def write(self, data: bytes):
 		if self.__is_debug:
 			print("ReadWriteSocket: write: writing message: " + str(data))
-		self.__readable_socket.write(data)
-		self.__readable_socket.flush()
+		try:
+			self.__readable_socket.write(data)
+			self.__readable_socket.flush()
+		except BrokenPipeError as ex:
+			raise ReadWriteSocketClosedException()
 
 	def close(self):
 		if self.__is_debug:

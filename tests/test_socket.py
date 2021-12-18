@@ -832,7 +832,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		time.sleep(0.5)
 
 		print("writing...")
-		with self.assertRaises(BrokenPipeError) as _broken_pipe_error_exception_assert_raises_context:
+		with self.assertRaises(ReadWriteSocketClosedException):
 			_client_socket.write("test 0")
 			raise Exception(f"Failed to discover broken pipe in write")
 		print("_client_socket closing...")
@@ -897,7 +897,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 
 		print("_client_socket closing...")
 		with self.assertRaises(AssertionError):
-			with self.assertRaises(BrokenPipeError):
+			with self.assertRaises(ReadWriteSocketClosedException):
 				_client_socket.close()
 		print("_server_socket stopping...")
 		_server_socket.stop_accepting_clients()

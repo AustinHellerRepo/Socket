@@ -228,6 +228,9 @@ class ReadWriteSocketClosedException(Exception):
 
 		pass
 
+	def __str__(self):
+		return str(type(self))
+
 
 class ReadWriteSocket():
 
@@ -487,6 +490,8 @@ class ClientSocket():
 		self.__is_closing = False
 		self.__read_waiting_semaphore = Semaphore()
 		self.__write_waiting_semaphore = Semaphore()
+		self.__writing_thread = None
+		self.__reading_thread = None
 
 		self.__initialize()
 
@@ -594,7 +599,13 @@ class ClientSocket():
 			try:
 				while not self.__is_closing:
 
+					if self.__is_debug:
+						print(f"ClientSocket: __write: _writing_thread_method: self.__write_waiting_semaphore.acquire(): start")
+
 					self.__write_waiting_semaphore.acquire()
+
+					if self.__is_debug:
+						print(f"ClientSocket: __write: _writing_thread_method: self.__write_waiting_semaphore.acquire(): end")
 
 					if not self.__is_closing:
 
@@ -639,7 +650,7 @@ class ClientSocket():
 
 							except Exception as ex:
 								if self.__is_debug:
-									print(f"ClientSocket: __write: 1 ex: " + str(ex))
+									print(f"ClientSocket: __write: _write_method: 1 ex: " + str(type(ex)))
 								self.__try_set_exception(
 									exception=ex
 								)
@@ -649,7 +660,7 @@ class ClientSocket():
 								if _blocking_semaphore is not None:
 									_blocking_semaphore.release()
 									if self.__is_debug:
-										print(f"ClientSocket: __write: unblocking semaphore in finally")
+										print(f"ClientSocket: __write: _write_method: unblocking semaphore in finally")
 
 						if self.__timeout_seconds is None:
 							_write_method()
@@ -700,10 +711,14 @@ class ClientSocket():
 					print(f"ClientSocket: __write: finally: ended")
 
 		if _is_writing_thread_needed:
+			if self.__is_debug:
+				print(f"ClientSocket: __write: self.__writing_thread created: start")
 			self.__writing_threads_running_total_semaphore.acquire()
 			self.__writing_threads_running_total += 1
 			self.__writing_threads_running_total_semaphore.release()
-			_writing_thread = start_thread(_writing_thread_method)
+			self.__writing_thread = start_thread(_writing_thread_method)
+			if self.__is_debug:
+				print(f"ClientSocket: __write: self.__writing_thread created: end")
 
 		if not is_async:
 			# this will block the thread if the _write_method throws an unhandled exception
@@ -827,13 +842,13 @@ class ClientSocket():
 
 								def during():
 									if self.__is_debug:
-										print(f"ClientSocket: __read: _reading_thread_method: setting exception: {ex}")
+										print(f"ClientSocket: __read: _read_method: setting exception: {ex}")
 
 								self.__try_set_exception(ex, during)
 
 							finally:
 								if self.__is_debug:
-									print(f"ClientSocket: __read: _reading_thread_method: finally")
+									print(f"ClientSocket: __read: _read_method: finally")
 								if not bool(self.__reading_callback_queue) or self.__is_closing:
 									self.__is_reading = False
 								if _blocking_semaphore is not None:
@@ -889,10 +904,14 @@ class ClientSocket():
 					print(f"ClientSocket: __read: finally: ended")
 
 		if _is_reading_thread_needed:
+			if self.__is_debug:
+				print(f"ClientSocket: __read: self.__reading_thread created: start")
 			self.__reading_threads_running_total_semaphore.acquire()
 			self.__reading_threads_running_total += 1
 			self.__reading_threads_running_total_semaphore.release()
-			_reading_thread = start_thread(_reading_thread_method)
+			self.__reading_thread = start_thread(_reading_thread_method)
+			if self.__is_debug:
+				print(f"ClientSocket: __read: self.__reading_thread created: end")
 
 		if not is_async:
 			# this will block the thread if the _read_method throws an unhandled exception
@@ -973,11 +992,27 @@ class ClientSocket():
 
 	def close(self):
 
+		if self.__is_debug:
+			print(f"ClientSocket: close: start")
+
 		self.__is_closing = True
 
 		if self.__is_debug:
 			if self.__exception is not None:
-				print(f"closing with pre-existing exception: " + str(self.__exception))
+				print(f"ClientSocket: close: closing with pre-existing exception: " + str(self.__exception))
+
+		_close_exception = None
+		try:
+			if self.__is_debug:
+				print(f"ClientSocket: close: closing read_write_socket")
+			self.__read_write_socket.close()
+			if self.__is_debug:
+				print(f"ClientSocket: close: closed read_write_socket")
+		except Exception as ex:
+			_close_exception = ex
+
+		if _close_exception is not None:
+			raise _close_exception
 
 		try:
 			self.__read_waiting_semaphore.release()
@@ -989,19 +1024,28 @@ class ClientSocket():
 		except Exception as ex:
 			pass
 
-		_close_exception = None
-		try:
-			self.__read_write_socket.close()
+		if self.__reading_thread is not None:
 			if self.__is_debug:
-				print(f"deleting read_write_socket")
-			del self.__read_write_socket
+				print(f"ClientSocket: close: reading_thread join: start")
+			self.__reading_thread.join()
 			if self.__is_debug:
-				print(f"deleted read_write_socket")
-		except Exception as ex:
-			_close_exception = ex
+				print(f"ClientSocket: close: reading_thread join: end")
+		else:
+			if self.__is_debug:
+				print(f"ClientSocket: close: reading_thread is None")
 
-		if _close_exception is not None:
-			raise _close_exception
+		if self.__writing_thread is not None:
+			if self.__is_debug:
+				print(f"ClientSocket: close: writing_thread join: start")
+			self.__writing_thread.join()
+			if self.__is_debug:
+				print(f"ClientSocket: close: writing_thread join: end")
+		else:
+			if self.__is_debug:
+				print(f"ClientSocket: close: writing_thread is None")
+
+		if self.__is_debug:
+			print(f"ClientSocket: close: end")
 
 
 class ClientSocketFactory():
@@ -1061,9 +1105,10 @@ class ServerSocket():
 			self.__bindable_address = socket.getaddrinfo(self.__host_ip_address, self.__host_port, 0, socket.SOCK_STREAM)[0][-1]
 
 			def _process_connection_thread_method(connection_socket, address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds: float):
+				accepted_client_socket = None
 				try:
 					if address not in self.__blocked_client_addresses:
-						_accepted_socket = ClientSocket(
+						accepted_client_socket = ClientSocket(
 							packet_bytes_length=to_client_packet_bytes_length,
 							read_failed_delay_seconds=client_read_failed_delay_seconds,
 							is_ssl=self.__is_ssl,
@@ -1073,30 +1118,31 @@ class ServerSocket():
 							timeout_seconds=self.__client_socket_timeout_seconds,
 							is_debug=self.__is_debug
 						)
-						_is_valid_client = on_accepted_client_method(_accepted_socket)
+						_is_valid_client = on_accepted_client_method(accepted_client_socket)
 						if _is_valid_client == False:
 							self.__blocked_client_addresses.append(address)
+					else:
+						# blocked connection
+						connection_socket.shutdown(2)
+						connection_socket.close()
 				except Exception as ex:
 					if self.__is_debug:
 						print(f"ServerSocket: _process_connection_thread_method: ex: {ex}")
+					# NOTE: shutting down causes other issues for clients
+					#connection_socket.shutdown(2)
 					try:
-						#connection_socket.shutdown(2)
-						pass
-					except Exception as ex:
+						#connection_socket.close()
+						if accepted_client_socket is not None:
+							# this will properly close read/write threads internal to the client socket
+							accepted_client_socket.close()
+					except Exception as ex_close:
 						if self.__is_debug:
-							print(f"ServerSocket: failed to shutdown: {ex}")
-						pass
-					connection_socket.close()
+							print(f"ServerSocket: _process_connection_thread_method: ex_close: {ex_close}")
 				finally:
-					#print(f"ServerSocket: _process_connection_thread_method: closing connection...")
-					if False:  # I think that the state of the client must be determined by the user via the on_accepted_client_method callback
-						try:
-							connection_socket.shutdown(2)
-						except Exception as ex:
-							pass
-						connection_socket.close()
-					#del connection_socket
-					#print(f"ServerSocket: _process_connection_thread_method: closed connection.")
+					# NOTE: the process method may be async, so I think that the state of the client must be determined by the user via the on_accepted_client_method callback
+					# connection_socket.shutdown(2)
+					# connection_socket.close()
+					pass
 
 			def _accepting_thread_method(to_client_packet_bytes_length, on_accepted_client_method, listening_limit_total, accept_timeout_seconds, client_read_failed_delay_seconds):
 
@@ -1115,6 +1161,9 @@ class ServerSocket():
 				self.__accepting_socket.bind(self.__bindable_address)
 				self.__accepting_socket.listen(listening_limit_total)
 				self.__accepting_socket.settimeout(accept_timeout_seconds)
+
+				connection_threads = []
+
 				while self.__is_accepting:
 					if self.__is_debug:
 						print("ServerSocket: start_accepting_clients: loop started")
@@ -1122,6 +1171,7 @@ class ServerSocket():
 						_connection_socket, _address = self.__accepting_socket.accept()
 						#_connection_socket.setblocking(False)
 						_connection_thread = start_thread(_process_connection_thread_method, _connection_socket, _address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds)
+						connection_threads.append(_connection_thread)
 					except Exception as ex:
 						if self.__is_debug:
 							print("ServerSocket: start_accepting_clients: ex: " + str(ex))
@@ -1134,6 +1184,13 @@ class ServerSocket():
 							self.__is_accepting = False
 					if _is_threading_async:
 						time.sleep(0.01)
+
+				if self.__is_debug:
+					print("ServerSocket: start_accepting_clients: join on connection threads: start")
+				for connection_thread in connection_threads:
+					connection_thread.join()
+				if self.__is_debug:
+					print("ServerSocket: start_accepting_clients: join on connection threads: end")
 
 			self.__accepting_thread = start_thread(_accepting_thread_method, self.__to_client_packet_bytes_length, on_accepted_client_method, self.__listening_limit_total, self.__accept_timeout_seconds, self.__client_read_failed_delay_seconds)
 

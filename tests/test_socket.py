@@ -15,6 +15,27 @@ import traceback
 
 _port = 28775
 _is_debug = False
+_show_plot = False
+
+
+def get_default_client_socket_factory() -> ClientSocketFactory:
+	return ClientSocketFactory(
+		to_server_packet_bytes_length=4096,
+		server_read_failed_delay_seconds=0,
+		is_ssl=False,
+		is_debug=_is_debug
+	)
+
+
+def get_default_server_socket_factory() -> ServerSocketFactory:
+	return ServerSocketFactory(
+		to_client_packet_bytes_length=4096,
+		listening_limit_total=10,
+		accept_timeout_seconds=1.0,
+		client_read_failed_delay_seconds=0,
+		is_ssl=False,
+		is_debug=_is_debug
+	)
 
 
 class SocketClientFactoryTest(unittest.TestCase):
@@ -1023,7 +1044,7 @@ class SocketClientFactoryTest(unittest.TestCase):
 		print("waiting...")
 		time.sleep(1.1)
 
-		with self.assertRaises(ConnectionResetError):
+		with self.assertRaises(ReadWriteSocketClosedException):
 			print("reading...")
 			_client_socket.read()
 		print("_client_socket closing...")
@@ -1337,8 +1358,110 @@ class SocketClientFactoryTest(unittest.TestCase):
 		print(f"Max diff seconds {max(diff_seconds_totals)} at {diff_seconds_totals.index(max(diff_seconds_totals))}")
 		print(f"Ave diff seconds {sum(diff_seconds_totals) / expected_messages_total}")
 
-		plt.scatter(write_datetimes, range(len(write_datetimes)), s=1, c="red")
-		plt.scatter(read_datetimes, range(len(read_datetimes)), s=1, c="blue")
-		plt.show()
+		if _show_plot:
+			plt.scatter(write_datetimes, range(len(write_datetimes)), s=1, c="red")
+			plt.scatter(read_datetimes, range(len(read_datetimes)), s=1, c="blue")
+			plt.show()
 
-		plt.close()
+			plt.close()
+
+	def test_write_message_from_accepted_socket_but_not_read_and_close(self):
+
+		client_socket = get_default_client_socket_factory().get_client_socket()
+
+		server_socket = get_default_server_socket_factory().get_server_socket()
+
+		def on_accepted_client_method(client_socket: ClientSocket):
+			client_socket.write("test")
+			print(f"write is async by nature")
+			client_socket.close()
+
+		server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=36429,
+			on_accepted_client_method=on_accepted_client_method
+		)
+
+		time.sleep(1)
+
+		client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=36429
+		)
+
+		time.sleep(1)
+
+		client_socket.close()
+
+		print(f"server_socket client_socket.close()")
+
+		server_socket.stop_accepting_clients()
+
+		print(f"server_socket stop_accepting_clients()")
+
+		server_socket.close()
+
+		print(f"server_socket closed")
+
+		time.sleep(3)
+
+	def test_write_many_messages_and_then_close_immediately(self):
+
+		message_total = 1000
+
+		client_socket = get_default_client_socket_factory().get_client_socket()
+
+		server_socket = get_default_server_socket_factory().get_server_socket()
+
+		def on_accepted_client_method(client_socket: ClientSocket):
+			nonlocal message_total
+			for message_index in range(message_total):
+				try:
+					message = client_socket.read()
+
+					# TODO determine why having this write keeps a thread alive (maybe it's the _writing_thread_method?)
+					try:
+						client_socket.write(f"reply {int(message.split(' ')[-1])}")
+					except Exception as ex:
+						print(f"on_accepted_client_method: write: ex: {ex}")
+						raise ex
+
+				except Exception as ex:
+					print(f"on_accepted_client_method: read: ex: {ex}")
+					raise ex
+
+			raise Exception("Unexpectedly reached the end without an exception from the write above.")
+
+		server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=36429,
+			on_accepted_client_method=on_accepted_client_method
+		)
+
+		time.sleep(1)
+
+		client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=36429
+		)
+
+		time.sleep(1)
+
+		for index in range(message_total):
+			client_socket.write(f"test {index}")
+
+		time.sleep(1)
+
+		client_socket.close()
+
+		print(f"server_socket client_socket.close()")
+
+		server_socket.stop_accepting_clients()
+
+		print(f"server_socket stop_accepting_clients()")
+
+		server_socket.close()
+
+		print(f"server_socket closed")
+
+		time.sleep(3)

@@ -1091,6 +1091,7 @@ class ServerSocket():
 		self.__accepting_thread = None  # type: threading.Thread
 		self.__accepting_socket = None
 		self.__blocked_client_addresses = []
+		self.__connected_threads = []
 
 	def start_accepting_clients(self, *, host_ip_address: str, host_port: int, on_accepted_client_method):
 
@@ -1162,16 +1163,14 @@ class ServerSocket():
 				self.__accepting_socket.listen(listening_limit_total)
 				self.__accepting_socket.settimeout(accept_timeout_seconds)
 
-				connection_threads = []
-
 				while self.__is_accepting:
 					if self.__is_debug:
 						print("ServerSocket: start_accepting_clients: loop started")
 					try:
 						_connection_socket, _address = self.__accepting_socket.accept()
 						#_connection_socket.setblocking(False)
-						_connection_thread = start_thread(_process_connection_thread_method, _connection_socket, _address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds)
-						connection_threads.append(_connection_thread)
+						connected_thread = start_thread(_process_connection_thread_method, _connection_socket, _address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds)
+						self.__connected_threads.append(connected_thread)
 					except Exception as ex:
 						if self.__is_debug:
 							print("ServerSocket: start_accepting_clients: ex: " + str(ex))
@@ -1184,13 +1183,6 @@ class ServerSocket():
 							self.__is_accepting = False
 					if _is_threading_async:
 						time.sleep(0.01)
-
-				if self.__is_debug:
-					print("ServerSocket: start_accepting_clients: join on connection threads: start")
-				for connection_thread in connection_threads:
-					connection_thread.join()
-				if self.__is_debug:
-					print("ServerSocket: start_accepting_clients: join on connection threads: end")
 
 			self.__accepting_thread = start_thread(_accepting_thread_method, self.__to_client_packet_bytes_length, on_accepted_client_method, self.__listening_limit_total, self.__accept_timeout_seconds, self.__client_read_failed_delay_seconds)
 
@@ -1213,6 +1205,17 @@ class ServerSocket():
 		else:
 			self.__accepting_socket.shutdown(2)
 			self.__accepting_socket.close()
+
+	def join(self):
+
+		if self.__is_accepting:
+			raise Exception("Should not join on connected threads while accepting new connections.")
+		if self.__is_debug:
+			print("ServerSocket: start_accepting_clients: join on connection threads: start")
+		for connected_thread in self.__connected_threads:
+			connected_thread.join()
+		if self.__is_debug:
+			print("ServerSocket: start_accepting_clients: join on connection threads: end")
 
 
 class ServerSocketFactory():

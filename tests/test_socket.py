@@ -1465,3 +1465,5 @@ class SocketClientFactoryTest(unittest.TestCase):
 		print(f"server_socket closed")
 
 		time.sleep(3)
+
+# TODO test joining on server socket when it should permit it and when it should not

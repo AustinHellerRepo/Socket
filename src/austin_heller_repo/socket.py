@@ -448,6 +448,13 @@ class ClientSocket():
 
 	def __initialize(self):
 
+		if (all(file_path is not None for file_path in [self.__ssl_private_key_file_path, self.__ssl_certificate_file_path, self.__root_ssl_certificate_file_path])):
+			pass  # this ClientSocket will communicate over SSL
+		elif (all(file_path is None for file_path in [self.__ssl_private_key_file_path, self.__ssl_certificate_file_path, self.__root_ssl_certificate_file_path])):
+			pass  # this ClientSocket will not communicate over SSL
+		else:
+			raise Exception("Either submit all SSL-related arguments or none of them.")
+
 		self.__wrap_socket()
 		self.__read_waiting_semaphore.acquire()
 		self.__write_waiting_semaphore.acquire()
@@ -1076,6 +1083,17 @@ class ServerSocket():
 		self.__accepting_socket = None
 		self.__blocked_client_addresses = []
 		self.__connected_threads = []
+
+		self.__initialize()
+
+	def __initialize(self):
+
+		if (all(file_path is not None for file_path in [self.__ssl_private_key_file_path, self.__ssl_certificate_file_path, self.__root_ssl_certificate_file_path])):
+			pass  # this ClientSocket will communicate over SSL
+		elif (all(file_path is None for file_path in [self.__ssl_private_key_file_path, self.__ssl_certificate_file_path, self.__root_ssl_certificate_file_path])):
+			pass  # this ClientSocket will not communicate over SSL
+		else:
+			raise Exception("Either submit all SSL-related arguments or none of them.")
 
 	def start_accepting_clients(self, *, host_ip_address: str, host_port: int, on_accepted_client_method):
 

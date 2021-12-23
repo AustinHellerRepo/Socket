@@ -1026,10 +1026,11 @@ class ClientSocket():
 
 class ClientSocketFactory():
 
-	def __init__(self, *, to_server_packet_bytes_length: int, ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
+	def __init__(self, *, to_server_packet_bytes_length: int, client_ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
 
 		self.__to_server_packet_bytes_length = to_server_packet_bytes_length
-		self.__ssl_certificate_file_path = ssl_certificate_file_path
+		self.__client_ssl_certificate_file_path = client_ssl_certificate_file_path
+		self.__root_ssl_certificate_file_path = root_ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__is_debug = is_debug
@@ -1037,7 +1038,8 @@ class ClientSocketFactory():
 	def get_client_socket(self) -> ClientSocket:
 		return ClientSocket(
 			packet_bytes_length=self.__to_server_packet_bytes_length,
-			ssl_certificate_file_path=self.__ssl_certificate_file_path,
+			client_ssl_certificate_file_path=self.__client_ssl_certificate_file_path,
+			root_ssl_certificate_file_path=self.__root_ssl_certificate_file_path,
 			encryption=self.__encryption,
 			delay_between_packets_seconds=self.__delay_between_packets_seconds,
 			is_debug=self.__is_debug

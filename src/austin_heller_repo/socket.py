@@ -405,10 +405,11 @@ class ClientSocketTimeoutException(Exception):
 
 class ClientSocket():
 
-	def __init__(self, *, packet_bytes_length: int, client_ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
+	def __init__(self, *, packet_bytes_length: int, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__packet_bytes_length = packet_bytes_length
-		self.__client_ssl_certificate_file_path = client_ssl_certificate_file_path
+		self.__ssl_private_key_file_path = ssl_private_key_file_path
+		self.__ssl_certificate_file_path = ssl_certificate_file_path
 		self.__root_ssl_certificate_file_path = root_ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
@@ -476,9 +477,13 @@ class ClientSocket():
 
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-		if self.__client_ssl_certificate_file_path is not None and self.__root_ssl_certificate_file_path is not None:
+		if self.__ssl_certificate_file_path is not None and self.__ssl_private_key_file_path is not None and self.__root_ssl_certificate_file_path is not None:
 			ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=self.__root_ssl_certificate_file_path)
-			ssl_context.load_verify_locations(self.__client_ssl_certificate_file_path)
+			ssl_context.load_verify_locations(self.__root_ssl_certificate_file_path)
+			ssl_context.load_cert_chain(
+				certfile=self.__ssl_certificate_file_path,
+				keyfile=self.__ssl_private_key_file_path
+			)
 			ssl_context.verify_mode = ssl.CERT_REQUIRED
 			self.__socket = ssl_context.wrap_socket(self.__socket, server_side=False, server_hostname=ip_address)
 			#self.__socket = ssl.wrap_socket(self.__socket, ssl_version=ssl.PROTOCOL_TLS)
@@ -1026,10 +1031,11 @@ class ClientSocket():
 
 class ClientSocketFactory():
 
-	def __init__(self, *, to_server_packet_bytes_length: int, client_ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
+	def __init__(self, *, to_server_packet_bytes_length: int, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
 
 		self.__to_server_packet_bytes_length = to_server_packet_bytes_length
-		self.__client_ssl_certificate_file_path = client_ssl_certificate_file_path
+		self.__ssl_private_key_file_path = ssl_private_key_file_path
+		self.__ssl_certificate_file_path = ssl_certificate_file_path
 		self.__root_ssl_certificate_file_path = root_ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
@@ -1038,7 +1044,8 @@ class ClientSocketFactory():
 	def get_client_socket(self) -> ClientSocket:
 		return ClientSocket(
 			packet_bytes_length=self.__to_server_packet_bytes_length,
-			client_ssl_certificate_file_path=self.__client_ssl_certificate_file_path,
+			ssl_private_key_file_path=self.__ssl_private_key_file_path,
+			ssl_certificate_file_path=self.__ssl_certificate_file_path,
 			root_ssl_certificate_file_path=self.__root_ssl_certificate_file_path,
 			encryption=self.__encryption,
 			delay_between_packets_seconds=self.__delay_between_packets_seconds,
@@ -1048,13 +1055,14 @@ class ClientSocketFactory():
 
 class ServerSocket():
 
-	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None, is_debug: bool = False):
+	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
 		self.__accept_timeout_seconds = accept_timeout_seconds
 		self.__ssl_private_key_file_path = ssl_private_key_file_path
 		self.__ssl_certificate_file_path = ssl_certificate_file_path
+		self.__root_ssl_certificate_file_path = root_ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
@@ -1087,7 +1095,9 @@ class ServerSocket():
 					if address not in self.__blocked_client_addresses:
 						accepted_client_socket = ClientSocket(
 							packet_bytes_length=to_client_packet_bytes_length,
+							ssl_private_key_file_path=self.__ssl_private_key_file_path,
 							ssl_certificate_file_path=self.__ssl_certificate_file_path,
+							root_ssl_certificate_file_path=self.__root_ssl_certificate_file_path,
 							socket=connection_socket,
 							encryption=self.__encryption,
 							delay_between_packets_seconds=self.__delay_between_packets_seconds,
@@ -1125,13 +1135,14 @@ class ServerSocket():
 				self.__accepting_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 				# TODO consider setting the IPPROTO just like the client socket
 
-				if self.__ssl_private_key_file_path is not None and self.__ssl_certificate_file_path is not None:
-					ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=certifi.where())
-					ssl_context.verify_mode = ssl.CERT_REQUIRED
+				if self.__ssl_private_key_file_path is not None and self.__ssl_certificate_file_path is not None and self.__root_ssl_certificate_file_path is not None:
+					ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=self.__root_ssl_certificate_file_path)
+					ssl_context.load_verify_locations(self.__root_ssl_certificate_file_path)
 					ssl_context.load_cert_chain(
 						certfile=self.__ssl_certificate_file_path,
 						keyfile=self.__ssl_private_key_file_path
 					)
+					ssl_context.verify_mode = ssl.CERT_REQUIRED
 					self.__accepting_socket = ssl_context.wrap_socket(self.__accepting_socket, server_side=True)
 					#self.__accepting_socket = ssl.wrap_socket(self.__accepting_socket, ssl_version=ssl.PROTOCOL_TLS)
 
@@ -1204,6 +1215,7 @@ class ServerSocketFactory():
 				 accept_timeout_seconds: float,
 				 ssl_private_key_file_path: str = None,
 				 ssl_certificate_file_path: str = None,
+				 root_ssl_certificate_file_path: str = None,
 				 encryption: Encryption = None,
 				 delay_between_packets_seconds: float = 0,
 				 client_socket_timeout_seconds: float = None,
@@ -1214,6 +1226,7 @@ class ServerSocketFactory():
 		self.__accept_timeout_seconds = accept_timeout_seconds
 		self.__ssl_private_key_file_path = ssl_private_key_file_path
 		self.__ssl_certificate_file_path = ssl_certificate_file_path
+		self.__root_ssl_certificate_file_path = root_ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
@@ -1227,6 +1240,7 @@ class ServerSocketFactory():
 			accept_timeout_seconds=self.__accept_timeout_seconds,
 			ssl_private_key_file_path=self.__ssl_private_key_file_path,
 			ssl_certificate_file_path=self.__ssl_certificate_file_path,
+			root_ssl_certificate_file_path=self.__root_ssl_certificate_file_path,
 			encryption=self.__encryption,
 			delay_between_packets_seconds=self.__delay_between_packets_seconds,
 			client_socket_timeout_seconds=self.__client_socket_timeout_seconds,

@@ -405,10 +405,11 @@ class ClientSocketTimeoutException(Exception):
 
 class ClientSocket():
 
-	def __init__(self, *, packet_bytes_length: int, ssl_certificate_file_path: str = None, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
+	def __init__(self, *, packet_bytes_length: int, client_ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__packet_bytes_length = packet_bytes_length
-		self.__ssl_certificate_file_path = ssl_certificate_file_path
+		self.__client_ssl_certificate_file_path = client_ssl_certificate_file_path
+		self.__root_ssl_certificate_file_path = root_ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__timeout_seconds = timeout_seconds
@@ -475,9 +476,9 @@ class ClientSocket():
 
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-		if self.__ssl_certificate_file_path is not None:
-			ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=certifi.where())
-			ssl_context.load_verify_locations(self.__ssl_certificate_file_path)
+		if self.__client_ssl_certificate_file_path is not None and self.__root_ssl_certificate_file_path is not None:
+			ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=self.__root_ssl_certificate_file_path)
+			ssl_context.load_verify_locations(self.__client_ssl_certificate_file_path)
 			ssl_context.verify_mode = ssl.CERT_REQUIRED
 			self.__socket = ssl_context.wrap_socket(self.__socket, server_side=False, server_hostname=ip_address)
 			#self.__socket = ssl.wrap_socket(self.__socket, ssl_version=ssl.PROTOCOL_TLS)

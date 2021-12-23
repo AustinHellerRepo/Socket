@@ -170,57 +170,6 @@ import collections
 print("socket.py: loading internal")
 
 
-class ReadWriteSocket_Test():
-
-	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float):
-
-		self.__socket = socket
-		self.__read_failed_delay_seconds = read_failed_delay_seconds
-
-		self.__readable_socket = None
-
-		self.__initialize()
-
-	def __initialize(self):
-
-		self.__socket.setblocking(True)
-		self.__socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-		self.__readable_socket = self.__socket
-
-	def read(self, bytes_length: int) -> bytes:
-
-		_remaining_bytes_length = bytes_length
-		_bytes_packets = []
-		_read_bytes = None
-		while _remaining_bytes_length != 0:
-			_read_bytes = self.__readable_socket.recv(_remaining_bytes_length)
-			if _read_bytes == b"":
-				raise RuntimeError("Socket closed")
-			else:
-				_bytes_packets.append(_read_bytes)
-				_remaining_bytes_length -= len(_read_bytes)
-		_bytes = b"".join(_bytes_packets)
-		return _bytes
-
-	def write(self, data: bytes):
-		_data_bytes_length = len(data)
-		_sent_length_total = 0
-		while _sent_length_total != _data_bytes_length:
-			_sent_length = self.__readable_socket.send(data[_sent_length_total:])
-			if _sent_length == 0:
-				raise RuntimeError("Socket closed")
-			else:
-				_sent_length_total += _sent_length
-
-	def close(self):
-		try:
-			self.__socket.shutdown(2)
-		except Exception as ex:
-			pass
-		self.__socket.close()
-		del self.__socket
-
-
 class ReadWriteSocketClosedException(Exception):
 
 	def __init__(self, *args):
@@ -234,10 +183,9 @@ class ReadWriteSocketClosedException(Exception):
 
 class ReadWriteSocket():
 
-	def __init__(self, *, socket: socket.socket, read_failed_delay_seconds: float, is_debug: bool = False):
+	def __init__(self, *, socket: socket.socket, is_debug: bool = False):
 
 		self.__socket = socket
-		self.__read_failed_delay_seconds = read_failed_delay_seconds
 		self.__is_debug = is_debug
 
 		self.__readable_socket = None
@@ -457,11 +405,10 @@ class ClientSocketTimeoutException(Exception):
 
 class ClientSocket():
 
-	def __init__(self, *, packet_bytes_length: int, read_failed_delay_seconds: float, is_ssl: bool, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
+	def __init__(self, *, packet_bytes_length: int, ssl_certificate_file_path: str = None, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__packet_bytes_length = packet_bytes_length
-		self.__read_failed_delay_seconds = read_failed_delay_seconds
-		self.__is_ssl = is_ssl
+		self.__ssl_certificate_file_path = ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__timeout_seconds = timeout_seconds
@@ -508,7 +455,6 @@ class ClientSocket():
 		if self.__socket is not None:
 			_read_write_socket = ReadWriteSocket(
 				socket=self.__socket,
-				read_failed_delay_seconds=self.__read_failed_delay_seconds,
 				is_debug=self.__is_debug
 			)
 			if self.__encryption is not None:
@@ -529,11 +475,11 @@ class ClientSocket():
 
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-		if self.__is_ssl:
+		if self.__ssl_certificate_file_path is not None:
 			ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=certifi.where())
+			ssl_context.load_verify_locations(self.__ssl_certificate_file_path)
 			ssl_context.verify_mode = ssl.CERT_REQUIRED
-			ssl_context.check_hostname = False
-			self.__socket = ssl_context.wrap_socket(self.__socket, server_side=False)
+			self.__socket = ssl_context.wrap_socket(self.__socket, server_side=False, server_hostname=ip_address)
 			#self.__socket = ssl.wrap_socket(self.__socket, ssl_version=ssl.PROTOCOL_TLS)
 
 		self.__socket.connect((self.__ip_address, self.__port))
@@ -1079,11 +1025,10 @@ class ClientSocket():
 
 class ClientSocketFactory():
 
-	def __init__(self, *, to_server_packet_bytes_length: int, server_read_failed_delay_seconds: float, is_ssl: bool, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
+	def __init__(self, *, to_server_packet_bytes_length: int, ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
 
 		self.__to_server_packet_bytes_length = to_server_packet_bytes_length
-		self.__server_read_failed_delay_seconds = server_read_failed_delay_seconds
-		self.__is_ssl = is_ssl
+		self.__ssl_certificate_file_path = ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__is_debug = is_debug
@@ -1091,8 +1036,7 @@ class ClientSocketFactory():
 	def get_client_socket(self) -> ClientSocket:
 		return ClientSocket(
 			packet_bytes_length=self.__to_server_packet_bytes_length,
-			read_failed_delay_seconds=self.__server_read_failed_delay_seconds,
-			is_ssl=self.__is_ssl,
+			ssl_certificate_file_path=self.__ssl_certificate_file_path,
 			encryption=self.__encryption,
 			delay_between_packets_seconds=self.__delay_between_packets_seconds,
 			is_debug=self.__is_debug
@@ -1101,13 +1045,13 @@ class ClientSocketFactory():
 
 class ServerSocket():
 
-	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, client_read_failed_delay_seconds: float, is_ssl: bool, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None, is_debug: bool = False):
+	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
 		self.__accept_timeout_seconds = accept_timeout_seconds
-		self.__client_read_failed_delay_seconds = client_read_failed_delay_seconds
-		self.__is_ssl = is_ssl
+		self.__ssl_private_key_file_path = ssl_private_key_file_path
+		self.__ssl_certificate_file_path = ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
@@ -1134,14 +1078,13 @@ class ServerSocket():
 			self.__host_port = host_port
 			self.__bindable_address = socket.getaddrinfo(self.__host_ip_address, self.__host_port, 0, socket.SOCK_STREAM)[0][-1]
 
-			def _process_connection_thread_method(connection_socket, address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds: float):
+			def _process_connection_thread_method(connection_socket, address, to_client_packet_bytes_length, on_accepted_client_method):
 				accepted_client_socket = None
 				try:
 					if address not in self.__blocked_client_addresses:
 						accepted_client_socket = ClientSocket(
 							packet_bytes_length=to_client_packet_bytes_length,
-							read_failed_delay_seconds=client_read_failed_delay_seconds,
-							is_ssl=self.__is_ssl,
+							ssl_certificate_file_path=self.__ssl_certificate_file_path,
 							socket=connection_socket,
 							encryption=self.__encryption,
 							delay_between_packets_seconds=self.__delay_between_packets_seconds,
@@ -1174,15 +1117,18 @@ class ServerSocket():
 					# connection_socket.close()
 					pass
 
-			def _accepting_thread_method(to_client_packet_bytes_length, on_accepted_client_method, listening_limit_total, accept_timeout_seconds, client_read_failed_delay_seconds):
+			def _accepting_thread_method(to_client_packet_bytes_length, on_accepted_client_method, listening_limit_total, accept_timeout_seconds):
 
 				self.__accepting_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 				# TODO consider setting the IPPROTO just like the client socket
 
-				if self.__is_ssl:
+				if self.__ssl_private_key_file_path is not None and self.__ssl_certificate_file_path is not None:
 					ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=certifi.where())
 					ssl_context.verify_mode = ssl.CERT_REQUIRED
-					ssl_context.check_hostname = False
+					ssl_context.load_cert_chain(
+						certfile=self.__ssl_certificate_file_path,
+						keyfile=self.__ssl_private_key_file_path
+					)
 					self.__accepting_socket = ssl_context.wrap_socket(self.__accepting_socket, server_side=True)
 					#self.__accepting_socket = ssl.wrap_socket(self.__accepting_socket, ssl_version=ssl.PROTOCOL_TLS)
 
@@ -1198,7 +1144,7 @@ class ServerSocket():
 					try:
 						_connection_socket, _address = self.__accepting_socket.accept()
 						#_connection_socket.setblocking(False)
-						connected_thread = start_thread(_process_connection_thread_method, _connection_socket, _address, to_client_packet_bytes_length, on_accepted_client_method, client_read_failed_delay_seconds)
+						connected_thread = start_thread(_process_connection_thread_method, _connection_socket, _address, to_client_packet_bytes_length, on_accepted_client_method)
 						self.__connected_threads.append(connected_thread)
 					except Exception as ex:
 						if self.__is_debug:
@@ -1213,7 +1159,7 @@ class ServerSocket():
 					if _is_threading_async:
 						time.sleep(0.01)
 
-			self.__accepting_thread = start_thread(_accepting_thread_method, self.__to_client_packet_bytes_length, on_accepted_client_method, self.__listening_limit_total, self.__accept_timeout_seconds, self.__client_read_failed_delay_seconds)
+			self.__accepting_thread = start_thread(_accepting_thread_method, self.__to_client_packet_bytes_length, on_accepted_client_method, self.__listening_limit_total, self.__accept_timeout_seconds)
 
 	def is_accepting_clients(self) -> bool:
 		return self.__is_accepting
@@ -1253,8 +1199,8 @@ class ServerSocketFactory():
 				 to_client_packet_bytes_length: int,
 				 listening_limit_total: int,
 				 accept_timeout_seconds: float,
-				 client_read_failed_delay_seconds: float,
-				 is_ssl: bool,
+				 ssl_private_key_file_path: str = None,
+				 ssl_certificate_file_path: str = None,
 				 encryption: Encryption = None,
 				 delay_between_packets_seconds: float = 0,
 				 client_socket_timeout_seconds: float = None,
@@ -1263,8 +1209,8 @@ class ServerSocketFactory():
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
 		self.__accept_timeout_seconds = accept_timeout_seconds
-		self.__client_read_failed_delay_seconds = client_read_failed_delay_seconds
-		self.__is_ssl = is_ssl
+		self.__ssl_private_key_file_path = ssl_private_key_file_path
+		self.__ssl_certificate_file_path = ssl_certificate_file_path
 		self.__encryption = encryption
 		self.__delay_between_packets_seconds = delay_between_packets_seconds
 		self.__client_socket_timeout_seconds = client_socket_timeout_seconds
@@ -1276,8 +1222,8 @@ class ServerSocketFactory():
 			to_client_packet_bytes_length=self.__to_client_packet_bytes_length,
 			listening_limit_total=self.__listening_limit_total,
 			accept_timeout_seconds=self.__accept_timeout_seconds,
-			client_read_failed_delay_seconds=self.__client_read_failed_delay_seconds,
-			is_ssl=self.__is_ssl,
+			ssl_private_key_file_path=self.__ssl_private_key_file_path,
+			ssl_certificate_file_path=self.__ssl_certificate_file_path,
 			encryption=self.__encryption,
 			delay_between_packets_seconds=self.__delay_between_packets_seconds,
 			client_socket_timeout_seconds=self.__client_socket_timeout_seconds,

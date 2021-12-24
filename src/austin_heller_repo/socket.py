@@ -1163,7 +1163,8 @@ class ServerSocket():
 						keyfile=self.__ssl_private_key_file_path
 					)
 					ssl_context.verify_mode = ssl.CERT_REQUIRED
-					self.__accepting_socket = ssl_context.wrap_socket(self.__accepting_socket, server_side=True, server_hostname=self.__host_ip_address)
+					# NOTE this should not accept server_hostname since it is server-side
+					self.__accepting_socket = ssl_context.wrap_socket(self.__accepting_socket, server_side=True)
 					#self.__accepting_socket = ssl.wrap_socket(self.__accepting_socket, ssl_version=ssl.PROTOCOL_TLS)
 
 				self.__accepting_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

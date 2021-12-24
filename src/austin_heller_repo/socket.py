@@ -485,7 +485,8 @@ class ClientSocket():
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 		if self.__ssl_certificate_file_path is not None and self.__ssl_private_key_file_path is not None and self.__root_ssl_certificate_file_path is not None:
-			ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=self.__root_ssl_certificate_file_path)
+			#ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=self.__root_ssl_certificate_file_path)
+			ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_SERVER)
 			ssl_context.load_verify_locations(self.__root_ssl_certificate_file_path)
 			ssl_context.load_cert_chain(
 				certfile=self.__ssl_certificate_file_path,
@@ -1154,7 +1155,8 @@ class ServerSocket():
 				# TODO consider setting the IPPROTO just like the client socket
 
 				if self.__ssl_private_key_file_path is not None and self.__ssl_certificate_file_path is not None and self.__root_ssl_certificate_file_path is not None:
-					ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=self.__root_ssl_certificate_file_path)
+					#ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=self.__root_ssl_certificate_file_path)
+					ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
 					ssl_context.load_verify_locations(self.__root_ssl_certificate_file_path)
 					ssl_context.load_cert_chain(
 						certfile=self.__ssl_certificate_file_path,

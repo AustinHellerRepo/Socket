@@ -486,7 +486,7 @@ class ClientSocket():
 
 		if self.__ssl_certificate_file_path is not None and self.__ssl_private_key_file_path is not None and self.__root_ssl_certificate_file_path is not None:
 			#ssl_context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH, cafile=self.__root_ssl_certificate_file_path)
-			ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_SERVER)
+			ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
 			ssl_context.load_verify_locations(self.__root_ssl_certificate_file_path)
 			ssl_context.load_cert_chain(
 				certfile=self.__ssl_certificate_file_path,
@@ -1156,14 +1156,14 @@ class ServerSocket():
 
 				if self.__ssl_private_key_file_path is not None and self.__ssl_certificate_file_path is not None and self.__root_ssl_certificate_file_path is not None:
 					#ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=self.__root_ssl_certificate_file_path)
-					ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_CLIENT)
+					ssl_context = ssl.SSLContext(protocol=ssl.PROTOCOL_TLS_SERVER)
 					ssl_context.load_verify_locations(self.__root_ssl_certificate_file_path)
 					ssl_context.load_cert_chain(
 						certfile=self.__ssl_certificate_file_path,
 						keyfile=self.__ssl_private_key_file_path
 					)
 					ssl_context.verify_mode = ssl.CERT_REQUIRED
-					self.__accepting_socket = ssl_context.wrap_socket(self.__accepting_socket, server_side=True)
+					self.__accepting_socket = ssl_context.wrap_socket(self.__accepting_socket, server_side=True, server_hostname=self.__host_ip_address)
 					#self.__accepting_socket = ssl.wrap_socket(self.__accepting_socket, ssl_version=ssl.PROTOCOL_TLS)
 
 				self.__accepting_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

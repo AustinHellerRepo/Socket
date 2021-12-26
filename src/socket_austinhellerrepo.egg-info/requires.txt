@@ -1,1 +1,2 @@
-certifi
+common-austinhellerrepo@ git+https://github.com/AustinHellerRepo/Common
+threading-austinhellerrepo@ git+https://github.com/AustinHellerRepo/Threading

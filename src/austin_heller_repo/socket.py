@@ -50,7 +50,6 @@ except ImportError:
 	import socket
 
 import ssl
-import certifi
 
 _is_threading_async = True
 

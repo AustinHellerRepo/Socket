@@ -220,6 +220,8 @@ class ReadWriteSocket():
 				_remaining_bytes_length -= _read_bytes_length
 		except BrokenPipeError as ex:
 			raise ReadWriteSocketClosedException()
+		except ConnectionResetError as ex:
+			raise ReadWriteSocketClosedException()
 		_bytes = b"".join(_bytes_packets)
 
 		if self.__is_debug:
@@ -234,6 +236,8 @@ class ReadWriteSocket():
 			self.__readable_socket.write(data)
 			self.__readable_socket.flush()
 		except BrokenPipeError as ex:
+			raise ReadWriteSocketClosedException()
+		except ConnectionResetError as ex:
 			raise ReadWriteSocketClosedException()
 
 	def close(self):

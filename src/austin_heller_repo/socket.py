@@ -989,10 +989,6 @@ class ClientSocket():
 
 		self.__is_closing = True
 
-		if self.__is_debug:
-			if self.__exception is not None:
-				print(f"ClientSocket: close: closing with pre-existing exception: " + str(self.__exception))
-
 		_close_exception = None
 		try:
 			if self.__is_debug:

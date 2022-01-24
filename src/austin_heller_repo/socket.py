@@ -499,7 +499,11 @@ class ClientSocket():
 			self.__socket = ssl_context.wrap_socket(self.__socket, server_side=False, server_hostname=ip_address)
 			#self.__socket = ssl.wrap_socket(self.__socket, ssl_version=ssl.PROTOCOL_TLS)
 
-		self.__socket.connect((self.__ip_address, self.__port))
+		try:
+			self.__socket.connect((self.__ip_address, self.__port))
+		except ConnectionRefusedError as ex:
+			self.__socket.close()
+			raise
 
 		self.__wrap_socket()
 

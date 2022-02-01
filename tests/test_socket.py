@@ -419,6 +419,75 @@ class SocketClientFactoryTest(unittest.TestCase):
 		_server_sockets[0].close()
 		_server_socket.close()
 
+	def test_client_messages_4(self):
+		# send massive amount of messages from one client to the server
+
+		_server_sockets = []  # type: List[ClientSocket]
+		_server_sockets_semaphore = Semaphore()
+
+		def _on_accepted_client_method(client_socket: ClientSocket):
+			#print(f"Connected to client: {client_socket}")
+			_server_sockets_semaphore.acquire()
+			_server_sockets.append(client_socket)
+			_server_sockets_semaphore.release()
+
+		_server_socket_factory = get_default_server_socket_factory()
+		self.assertIsNotNone(_server_socket_factory)
+		_server_socket = _server_socket_factory.get_server_socket()
+		self.assertIsNotNone(_server_socket)
+		_server_socket.start_accepting_clients(
+			host_ip_address="0.0.0.0",
+			host_port=_port,
+			on_accepted_client_method=_on_accepted_client_method
+		)
+		time.sleep(1)
+		_client_socket_factory = get_default_client_socket_factory()
+		self.assertIsNotNone(_client_socket_factory)
+		_client_socket = _client_socket_factory.get_client_socket()
+		self.assertIsNotNone(_client_socket)
+		_client_socket.connect_to_server(
+			ip_address="0.0.0.0",
+			port=_port
+		)
+		_server_socket.stop_accepting_clients()
+
+		_expected_lines = []
+		_messages_total = 1000
+		for _index in range(_messages_total):
+			_expected_lines.append(str(_index))
+		for _expected_line_index, _expected_line in enumerate(_expected_lines):
+			_client_socket.write(_expected_line)
+
+		self.assertEqual(1, len(_server_sockets))
+		_actual_lines = []
+
+		def _read_callback(text: str):
+			_actual_lines.append(text)  # TODO is list.append thread-safe?
+		for _expected_line_index in range(len(_expected_lines)):
+			_server_sockets[0].read_async(_read_callback)
+
+		#print("waiting...")
+		time.sleep(1.0)
+		while _client_socket.is_writing() or _server_sockets[0].is_reading():
+			#print(f"_is_writing: {_client_socket.is_writing()} | _is_reading: {_server_sockets[0].is_reading()}")
+			time.sleep(0.1)
+
+		#print("finished")
+
+		self.assertEqual(_messages_total, len(_expected_lines))
+		self.assertEqual(_messages_total, len(_actual_lines))
+
+		#for _expected_line, _actual_line in zip(_expected_lines, _actual_lines):
+		#	print(f"len(_expected_line): {len(_expected_line)}")
+		#	print(f"len(_actual_line): {len(_actual_line)}")
+
+		for _expected_line, _actual_line in zip(_expected_lines, _actual_lines):
+			self.assertEqual(_expected_line, _actual_line)
+
+		_client_socket.close()
+		_server_sockets[0].close()
+		_server_socket.close()
+
 	def test_get_machine_guid_0(self):
 		# try to get the same guid from this machine
 		_first_guid = get_machine_guid()

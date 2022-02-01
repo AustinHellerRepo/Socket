@@ -1,6 +1,7 @@
 print("socket.py: loading: start")
 
 from austin_heller_repo.threading import Semaphore, TimeoutThread, start_thread
+from austin_heller_repo.common import ElapsedTime
 
 print("socket.py: loading gc")
 
@@ -562,9 +563,6 @@ class ClientSocket():
 			before(_exception)
 
 		if _exception is not None:
-			# NOTE: I would like to join on the underlying thread, but this stops the main thread from discovering the exception, closing the client socket, and permitting the thread to end
-			#if isinstance(_exception, ClientSocketTimeoutException):
-			#	_exception.get_timeout_thread().try_join()  # permits underlying exceptions to propagate
 			raise _exception
 
 	def __write(self, *, reader: TextReader or FileReader, is_async: bool):

@@ -409,7 +409,7 @@ class ClientSocketTimeoutException(Exception):
 
 class ClientSocket():
 
-	def __init__(self, *, packet_bytes_length: int, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
+	def __init__(self, *, packet_bytes_length: int = 4096, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, socket=None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__packet_bytes_length = packet_bytes_length
 		self.__ssl_private_key_file_path = ssl_private_key_file_path
@@ -1040,7 +1040,7 @@ class ClientSocket():
 
 class ClientSocketFactory():
 
-	def __init__(self, *, to_server_packet_bytes_length: int, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
+	def __init__(self, *, to_server_packet_bytes_length: int = 4096, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, is_debug: bool = False):
 
 		self.__to_server_packet_bytes_length = to_server_packet_bytes_length
 		self.__ssl_private_key_file_path = ssl_private_key_file_path
@@ -1064,7 +1064,7 @@ class ClientSocketFactory():
 
 class ServerSocket():
 
-	def __init__(self, *, to_client_packet_bytes_length: int, listening_limit_total: int, accept_timeout_seconds: float, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None, is_debug: bool = False):
+	def __init__(self, *, to_client_packet_bytes_length: int = 4096, listening_limit_total: int = 10, accept_timeout_seconds: float = 1.0, ssl_private_key_file_path: str = None, ssl_certificate_file_path: str = None, root_ssl_certificate_file_path: str = None, encryption: Encryption = None, delay_between_packets_seconds: float = 0, client_socket_timeout_seconds: float = None, is_debug: bool = False):
 
 		self.__to_client_packet_bytes_length = to_client_packet_bytes_length
 		self.__listening_limit_total = listening_limit_total
@@ -1232,9 +1232,9 @@ class ServerSocket():
 class ServerSocketFactory():
 
 	def __init__(self, *,
-				 to_client_packet_bytes_length: int,
-				 listening_limit_total: int,
-				 accept_timeout_seconds: float,
+				 to_client_packet_bytes_length: int = 4096,
+				 listening_limit_total: int = 10,
+				 accept_timeout_seconds: float = 1.0,
 				 ssl_private_key_file_path: str = None,
 				 ssl_certificate_file_path: str = None,
 				 root_ssl_certificate_file_path: str = None,

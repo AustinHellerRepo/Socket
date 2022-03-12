@@ -1,14 +1,8 @@
-print("socket.py: loading: start")
-
 from austin_heller_repo.threading import Semaphore, TimeoutThread, start_thread
 from austin_heller_repo.common import ElapsedTime
 
-print("socket.py: loading gc")
-
 import gc
 gc.collect()
-
-print("socket.py: loading: try_mkdir")
 
 def try_mkdir(directory_path) -> bool:
 	import os
@@ -41,8 +35,6 @@ def join_path(*paths):
 	gc.collect()
 	return _full_path
 
-print("socket.py: loading socket")
-
 try:
 	import usocket as socket
 except ImportError:
@@ -54,16 +46,12 @@ import ssl
 
 _is_threading_async = True
 
-print("socket.py: loading json")
-
 try:
 	import ujson as json
 except ImportError:
 	gc.collect()
 
 	import json
-
-print("socket.py: loading Encryption")
 
 try:
 	import cryptography.fernet
@@ -118,8 +106,6 @@ except ImportError:
 		def decrypt(self, *, encrypted_data: bytes) -> bytes:
 			raise NotImplementedError()
 
-print("socket.py: loading get_machine_guid")
-
 try:
 	import network
 	import hashlib
@@ -143,11 +129,7 @@ except ImportError:
 		_guid = str(uuid.UUID(int=_node, version=4))
 		return _guid
 
-print("socket.py: loading time")
-
 import time
-
-print("socket.py: loading get_module_from_file_path")
 
 try:
 	import importlib.util
@@ -163,11 +145,7 @@ except ImportError:
 	def get_module_from_file_path(file_path: str, module_name: str):
 		raise NotImplementedError()
 
-print("socket.py: loading collections")
-
 import collections
-
-print("socket.py: loading internal")
 
 
 class ReadWriteSocketClosedException(Exception):
